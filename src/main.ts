@@ -13,12 +13,34 @@ import { fetchRoutes, fetchVehicles } from "./mbtaApi";
 import { createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
 import type { RouteMeta, Vehicle } from "./types";
+import {
+  applyTheme,
+  createThemeState,
+  getThemeGridLineColor,
+  setContentLayerVisible
+} from "./ui";
 import "./styles.css";
 
 function requireCanvas(selector: string): HTMLCanvasElement {
   const element = document.querySelector(selector);
   if (!element || !(element instanceof HTMLCanvasElement)) {
     throw new Error(`Missing required canvas element: ${selector}`);
+  }
+  return element;
+}
+
+function requireInput(selector: string): HTMLInputElement {
+  const element = document.querySelector(selector);
+  if (!element || !(element instanceof HTMLInputElement)) {
+    throw new Error(`Missing required input element: ${selector}`);
+  }
+  return element;
+}
+
+function requireHtmlElement(selector: string): HTMLElement {
+  const element = document.querySelector(selector);
+  if (!element || !(element instanceof HTMLElement)) {
+    throw new Error(`Missing required HTML element: ${selector}`);
   }
   return element;
 }
@@ -36,6 +58,17 @@ function sameDims(
 
 function bootstrap(): void {
   const canvas = requireCanvas("#grid-canvas");
+  const contentOverlay = requireHtmlElement("#content-overlay");
+  const content = requireHtmlElement("#site-content");
+  const contentVisibilityToggle = requireInput("#toggle-content-visibility");
+  const darkModeToggle = requireInput("#toggle-dark-mode");
+  const themeState = createThemeState("light");
+
+  applyTheme(themeState.getTheme());
+  contentVisibilityToggle.checked = true;
+  darkModeToggle.checked = false;
+  setContentLayerVisible(content, contentOverlay, true);
+
   const baseDims = calculateGridDimensions(GRID_CONFIG);
   let renderDims = calculateRenderGridDimensions(
     baseDims,
@@ -51,7 +84,8 @@ function bootstrap(): void {
       cols: renderDims.cols,
       cellSizePx: GRID_CONFIG.cellSizePx,
       cellGapPx: GRID_CONFIG.cellGapPx,
-      transitionMs: GRID_CONFIG.transitionMs
+      transitionMs: GRID_CONFIG.transitionMs,
+      gridLineColor: getThemeGridLineColor(themeState.getTheme())
     });
     instance.resize(window.innerWidth, window.innerHeight);
     instance.start();
@@ -59,6 +93,16 @@ function bootstrap(): void {
   };
 
   let renderer = createRenderer();
+
+  contentVisibilityToggle.addEventListener("change", () => {
+    setContentLayerVisible(content, contentOverlay, contentVisibilityToggle.checked);
+  });
+
+  darkModeToggle.addEventListener("change", () => {
+    const nextTheme = themeState.setDarkModeEnabled(darkModeToggle.checked);
+    applyTheme(nextTheme);
+    renderer.setGridLineColor(getThemeGridLineColor(nextTheme));
+  });
 
   let routesById = new Map<string, RouteMeta>();
   let latestVehicles: Vehicle[] = [];

@@ -5,6 +5,7 @@ interface RendererOptions {
   cellSizePx: number;
   cellGapPx: number;
   transitionMs: number;
+  gridLineColor?: string;
 }
 
 function clamp01(value: number): number {
@@ -12,7 +13,7 @@ function clamp01(value: number): number {
 }
 
 const FADE_IN_START_CHANNEL = 255;
-const GRID_LINE_COLOR = "rgba(130, 138, 145, 0.16)";
+const DEFAULT_GRID_LINE_COLOR = "rgba(130, 138, 145, 0.16)";
 const GRID_LINE_WIDTH_PX = 0.8;
 
 export function interpolateBuffers(
@@ -49,6 +50,7 @@ export class GridRenderer {
   private readonly fromBuffer: Float32Array;
   private readonly toBuffer: Float32Array;
   private readonly frameBuffer: Float32Array;
+  private gridLineColor: string;
   private dpr = 1;
   private viewportWidthPx = 0;
   private viewportHeightPx = 0;
@@ -67,6 +69,7 @@ export class GridRenderer {
     this.cellSizePx = options.cellSizePx;
     this.cellGapPx = options.cellGapPx;
     this.transitionMs = options.transitionMs;
+    this.gridLineColor = options.gridLineColor ?? DEFAULT_GRID_LINE_COLOR;
 
     const channelCount = this.rows * this.cols * 4;
     this.fromBuffer = new Float32Array(channelCount);
@@ -112,6 +115,10 @@ export class GridRenderer {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+  }
+
+  public setGridLineColor(color: string): void {
+    this.gridLineColor = color;
   }
 
   private draw(nowMs: number): void {
@@ -161,7 +168,7 @@ export class GridRenderer {
     pitch: number
   ): void {
     this.ctx.beginPath();
-    this.ctx.strokeStyle = GRID_LINE_COLOR;
+    this.ctx.strokeStyle = this.gridLineColor;
     this.ctx.lineWidth = GRID_LINE_WIDTH_PX;
 
     for (let col = 0; col <= this.cols; col += 1) {

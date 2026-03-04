@@ -1,5 +1,9 @@
 :root {
   color-scheme: only light;
+  --page-bg: #f3f5f7;
+  --overlay-bg: rgba(255, 255, 255, 0.72);
+  --grid-line-color-light: rgba(130, 138, 145, 0.16);
+  --grid-line-color-dark: rgba(130, 138, 145, 0.28);
 }
 
 html,
@@ -8,18 +12,141 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--page-bg);
+}
+
+body[data-theme="light"] {
+  --page-bg: #f3f5f7;
+  --overlay-bg: rgba(255, 255, 255, 0.72);
+}
+
+body[data-theme="dark"] {
+  --page-bg: #22282d;
+  --overlay-bg: rgba(34, 40, 45, 0.58);
 }
 
 body {
   position: relative;
   font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  color: #111827;
+  transition: background-color 180ms ease;
 }
 
 #grid-canvas {
   position: fixed;
   inset: 0;
+  z-index: 0;
   width: 100%;
   height: 100%;
   display: block;
+}
+
+#content-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  padding: 1.2rem clamp(1rem, 3.2vw, 2.4rem) 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  background: var(--overlay-bg);
+  pointer-events: none;
+  overflow: auto;
+}
+
+#content-overlay[data-content-visible="false"] {
+  background: transparent;
+}
+
+#controls {
+  margin-left: auto;
+  display: flex;
+  gap: 0.6rem;
+  pointer-events: auto;
+}
+
+.toggle-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.64rem;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 24, 39, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 0.88rem;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.toggle-control input {
+  margin: 0;
+  accent-color: #111827;
+}
+
+#site-content {
+  pointer-events: auto;
+  width: min(760px, 100%);
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(17, 24, 39, 0.1);
+  border-radius: 16px;
+  padding: clamp(1.1rem, 2.2vw, 1.7rem);
+  box-shadow: 0 14px 34px rgba(17, 24, 39, 0.08);
+}
+
+#site-content h1 {
+  margin: 0 0 0.55rem;
+  font-size: clamp(1.7rem, 4.8vw, 2.45rem);
+  line-height: 1.1;
+}
+
+#site-content h2 {
+  margin: 0 0 0.42rem;
+  font-size: clamp(1.12rem, 3.1vw, 1.38rem);
+  line-height: 1.24;
+}
+
+#site-content p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin: 0 0 0.42rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(17, 24, 39, 0.72);
+}
+
+.site-section + .site-section {
+  margin-top: 1.25rem;
+}
+
+#site-content ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+#site-content li + li {
+  margin-top: 0.4rem;
+}
+
+@media (max-width: 720px) {
+  #content-overlay {
+    padding-top: 0.8rem;
+  }
+
+  #controls {
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .toggle-control {
+    font-size: 0.82rem;
+    padding: 0.36rem 0.58rem;
+  }
 }

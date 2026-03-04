@@ -5,9 +5,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MBTA Abstract Grid</title>
   </head>
-  <body>
+  <body data-theme="light">
     <canvas id="grid-canvas" aria-hidden="true"></canvas>
+    <div id="content-overlay">
+      <div id="controls">
+        <label class="toggle-control" for="toggle-content-visibility">
+          <input id="toggle-content-visibility" type="checkbox" checked />
+          <span>Show content</span>
+        </label>
+        <label class="toggle-control" for="toggle-dark-mode">
+          <input id="toggle-dark-mode" type="checkbox" />
+          <span>Dark mode</span>
+        </label>
+      </div>
+
+      <main id="site-content">
+        <section class="site-section">
+          <p class="eyebrow">Personal Site</p>
+          <h1>Your Name</h1>
+          <p>
+            A concise one-line intro about your work, interests, and what you are focused on now.
+          </p>
+        </section>
+
+        <section class="site-section">
+          <h2>Current and Previous Work</h2>
+          <p><strong>Current:</strong> Current role, team, and primary focus areas.</p>
+          <p><strong>Previous:</strong> Prior company or project and what you built there.</p>
+        </section>
+
+        <section class="site-section">
+          <h2>Personal Projects</h2>
+          <ul>
+            <li><strong>Project A:</strong> Short description of the project and your contribution.</li>
+            <li><strong>Project B:</strong> Short description of the project and your contribution.</li>
+            <li><strong>Project C:</strong> Short description of the project and your contribution.</li>
+          </ul>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
-
