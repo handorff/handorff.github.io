@@ -73,6 +73,21 @@ body {
   opacity: 1;
 }
 
+#grid-selected-outline {
+  position: fixed;
+  z-index: 2;
+  border: 2px solid #f9fafb;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.7);
+  transition: opacity 80ms linear;
+}
+
+#grid-selected-outline[data-visible="true"] {
+  opacity: 1;
+}
+
 #vehicle-tooltip {
   position: fixed;
   z-index: 3;

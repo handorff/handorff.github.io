@@ -167,3 +167,56 @@ export function buildRgbaBuffer(
 
   return buffer;
 }
+
+export interface SelectedVehicleBufferOptions {
+  dimmedOccupiedAlpha: number;
+  shapeCellIndices: ReadonlySet<number>;
+  shapeColorHex: string;
+  shapeAlpha: number;
+  selectedCellIndex: number;
+  selectedColorHex: string;
+  selectedAlpha: number;
+}
+
+export function buildSelectedVehicleRgbaBuffer(
+  cellCount: number,
+  stateByCell: ReadonlyMap<number, CellState>,
+  options: SelectedVehicleBufferOptions
+): Float32Array {
+  const buffer = new Float32Array(cellCount * 4);
+
+  for (const [cellIndex, cellState] of stateByCell.entries()) {
+    const rgb = parseHexToRgb(cellState.colorHex);
+    if (!rgb) {
+      continue;
+    }
+
+    const offset = cellIndex * 4;
+    buffer[offset] = rgb[0];
+    buffer[offset + 1] = rgb[1];
+    buffer[offset + 2] = rgb[2];
+    buffer[offset + 3] = options.dimmedOccupiedAlpha;
+  }
+
+  const shapeRgb = parseHexToRgb(options.shapeColorHex);
+  if (shapeRgb) {
+    for (const cellIndex of options.shapeCellIndices) {
+      const offset = cellIndex * 4;
+      buffer[offset] = shapeRgb[0];
+      buffer[offset + 1] = shapeRgb[1];
+      buffer[offset + 2] = shapeRgb[2];
+      buffer[offset + 3] = options.shapeAlpha;
+    }
+  }
+
+  const selectedRgb = parseHexToRgb(options.selectedColorHex);
+  if (selectedRgb) {
+    const offset = options.selectedCellIndex * 4;
+    buffer[offset] = selectedRgb[0];
+    buffer[offset + 1] = selectedRgb[1];
+    buffer[offset + 2] = selectedRgb[2];
+    buffer[offset + 3] = options.selectedAlpha;
+  }
+
+  return buffer;
+}

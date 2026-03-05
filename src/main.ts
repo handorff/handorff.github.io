@@ -6,6 +6,7 @@ import {
 import {
   calculateRenderGridDimensions,
   buildCellStateMap,
+  buildSelectedVehicleRgbaBuffer,
   buildRgbaBuffer,
   calculateGridDimensions,
   latLonToCell
@@ -13,6 +14,7 @@ import {
 import { fetchRoutes, fetchStopsByIds, fetchTripsByIds, fetchVehicles } from "./mbtaApi";
 import { createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
+import { rasterizeShapeToCellIndices } from "./shapeGrid";
 import type { RouteMeta, Vehicle } from "./types";
 import {
   applyTheme,
@@ -30,6 +32,9 @@ import { createTooltipMetadataStore } from "./tooltipMetadata";
 import "./styles.css";
 
 const TOOLTIP_MARGIN_PX = 12;
+const DIMMED_OCCUPIED_CELL_ALPHA = 0.18;
+const SHAPE_CELL_ALPHA = 0.76;
+const SELECTED_CELL_ALPHA = 0.94;
 
 function requireCanvas(selector: string): HTMLCanvasElement {
   const element = document.querySelector(selector);
@@ -81,6 +86,7 @@ function bootstrap(): void {
   const contentVisibilityToggle = requireInput("#toggle-content-visibility");
   const darkModeToggle = requireInput("#toggle-dark-mode");
   const hoverOutline = requireHtmlElement("#grid-hover-outline");
+  const selectedOutline = requireHtmlElement("#grid-selected-outline");
   const tooltip = requireHtmlElement("#vehicle-tooltip");
   const tooltipTitle = requireHtmlElement("#vehicle-tooltip-title");
   const tooltipStatus = requireHtmlElement("#vehicle-tooltip-status");
@@ -99,6 +105,7 @@ function bootstrap(): void {
   darkModeToggle.checked = false;
   setContentLayerVisible(content, contentOverlay, true);
   hoverOutline.setAttribute("data-visible", "false");
+  selectedOutline.setAttribute("data-visible", "false");
   tooltip.setAttribute("data-open", "false");
   tooltip.hidden = true;
 
@@ -129,15 +136,18 @@ function bootstrap(): void {
   let routesById = new Map<string, RouteMeta>();
   let latestVehicles: Vehicle[] = [];
   let isContentVisible = true;
-  let selectedCellIndex: number | null = null;
-  let selectedVehicleOffset = 0;
+  let selectedVehicleId: string | null = null;
+  const shapeCellCache = new Map<string, { polyline: string; cellIndices: Set<number> }>();
   let renderTooltipForSelection: (() => void) | null = null;
+  let updateSelectionVisualization: (() => void) | null = null;
 
   const tooltipMetadata = createTooltipMetadataStore({
     fetchStopsByIds,
     fetchTripsByIds,
     onDataChanged: () => {
-      if (selectedCellIndex !== null && !isContentVisible) {
+      if (selectedVehicleId !== null && !isContentVisible) {
+        renderer.setState(computeBuffer(latestVehicles));
+        updateSelectionVisualization?.();
         renderTooltipForSelection?.();
       }
     }
@@ -172,8 +182,21 @@ function bootstrap(): void {
   const canShowHoverOutline = (): boolean =>
     !isContentVisible && Boolean(finePointerMediaQuery?.matches);
 
+  const normalizeId = (id: string | null): string | null => {
+    if (!id) {
+      return null;
+    }
+
+    const trimmed = id.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
   const hideHoverOutline = (): void => {
     hoverOutline.setAttribute("data-visible", "false");
+  };
+
+  const hideSelectedOutline = (): void => {
+    selectedOutline.setAttribute("data-visible", "false");
   };
 
   const hideTooltip = (): void => {
@@ -181,23 +204,40 @@ function bootstrap(): void {
     tooltip.hidden = true;
   };
 
-  const clearSelection = (): void => {
-    selectedCellIndex = null;
-    selectedVehicleOffset = 0;
+  const getVehiclePlacement = (vehicle: Vehicle) =>
+    latLonToCell(
+      GRID_CONFIG.bounds,
+      baseDims,
+      vehicle.latitude,
+      vehicle.longitude,
+      renderDims
+    );
+
+  const getSelectedVehicle = (vehicles: Vehicle[] = latestVehicles): Vehicle | null => {
+    if (!selectedVehicleId) {
+      return null;
+    }
+
+    return vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;
+  };
+
+  const getRouteColorHex = (routeId: string | null): string =>
+    routeId ? routesById.get(routeId)?.colorHex ?? FALLBACK_COLOR_HEX : FALLBACK_COLOR_HEX;
+
+  const clearSelection = (rerender: boolean = true): void => {
+    selectedVehicleId = null;
     hideTooltip();
+    hideSelectedOutline();
+    if (rerender && !isContentVisible) {
+      renderer.setState(computeBuffer(latestVehicles));
+    }
   };
 
   const getVehiclesInCell = (cellIndex: number, vehicles: Vehicle[] = latestVehicles): Vehicle[] => {
     const inCell: Vehicle[] = [];
 
     for (const vehicle of vehicles) {
-      const placement = latLonToCell(
-        GRID_CONFIG.bounds,
-        baseDims,
-        vehicle.latitude,
-        vehicle.longitude,
-        renderDims
-      );
+      const placement = getVehiclePlacement(vehicle);
 
       if (placement?.index === cellIndex) {
         inCell.push(vehicle);
@@ -262,19 +302,143 @@ function bootstrap(): void {
     hoverOutline.setAttribute("data-visible", "true");
   };
 
+  const updateSelectedOutline = (cellIndex: number): void => {
+    const row = Math.floor(cellIndex / renderDims.cols);
+    const col = cellIndex % renderDims.cols;
+    if (row < 0 || row >= renderDims.rows || col < 0 || col >= renderDims.cols) {
+      hideSelectedOutline();
+      return;
+    }
+
+    const cellRect = renderer.getCellRect(row, col);
+    selectedOutline.style.left = `${cellRect.left}px`;
+    selectedOutline.style.top = `${cellRect.top}px`;
+    selectedOutline.style.width = `${cellRect.width}px`;
+    selectedOutline.style.height = `${cellRect.height}px`;
+    selectedOutline.setAttribute("data-visible", "true");
+  };
+
+  const getShapeCellIndicesForVehicle = (vehicle: Vehicle): Set<number> => {
+    const tripId = normalizeId(vehicle.relatedTripId);
+    if (!tripId) {
+      return new Set<number>();
+    }
+
+    const polyline = tooltipMetadata.getShapePolyline(vehicle);
+    if (!polyline) {
+      return new Set<number>();
+    }
+
+    const cacheKey = `${tripId}:${renderDims.rows}x${renderDims.cols}`;
+    const cached = shapeCellCache.get(cacheKey);
+    if (cached && cached.polyline === polyline) {
+      return cached.cellIndices;
+    }
+
+    const cellIndices = rasterizeShapeToCellIndices(
+      polyline,
+      GRID_CONFIG.bounds,
+      baseDims,
+      renderDims
+    );
+    shapeCellCache.set(cacheKey, { polyline, cellIndices });
+    return cellIndices;
+  };
+
+  const computeBuffer = (vehicles: Vehicle[]): Float32Array => {
+    const stateByCell = buildCellStateMap(
+      vehicles,
+      routesById,
+      GRID_CONFIG.bounds,
+      baseDims,
+      renderDims,
+      FALLBACK_COLOR_HEX
+    );
+
+    const selectedVehicle = !isContentVisible ? getSelectedVehicle(vehicles) : null;
+    if (!selectedVehicle) {
+      return buildRgbaBuffer(renderDims.cellCount, stateByCell, OCCUPIED_CELL_ALPHA);
+    }
+
+    const selectedPlacement = getVehiclePlacement(selectedVehicle);
+    if (!selectedPlacement) {
+      return buildRgbaBuffer(renderDims.cellCount, stateByCell, OCCUPIED_CELL_ALPHA);
+    }
+
+    const routeColorHex = getRouteColorHex(selectedVehicle.routeId);
+    const shapeCellIndices = getShapeCellIndicesForVehicle(selectedVehicle);
+    return buildSelectedVehicleRgbaBuffer(renderDims.cellCount, stateByCell, {
+      dimmedOccupiedAlpha: DIMMED_OCCUPIED_CELL_ALPHA,
+      shapeCellIndices,
+      shapeColorHex: routeColorHex,
+      shapeAlpha: SHAPE_CELL_ALPHA,
+      selectedCellIndex: selectedPlacement.index,
+      selectedColorHex: routeColorHex,
+      selectedAlpha: SELECTED_CELL_ALPHA
+    });
+  };
+
+  const prefetchSelectedVehicleMetadata = (vehicle: Vehicle | null): void => {
+    if (!vehicle || isContentVisible) {
+      return;
+    }
+
+    void tooltipMetadata.prefetchFromVehicles([vehicle]).catch((error) => {
+      console.error("Unable to prefetch tooltip metadata.", error);
+    });
+  };
+
+  updateSelectionVisualization = (): void => {
+    if (isContentVisible || !selectedVehicleId) {
+      hideSelectedOutline();
+      return;
+    }
+
+    const selectedVehicle = getSelectedVehicle();
+    if (!selectedVehicle) {
+      clearSelection();
+      return;
+    }
+
+    const selectedPlacement = getVehiclePlacement(selectedVehicle);
+    if (!selectedPlacement) {
+      clearSelection();
+      return;
+    }
+
+    updateSelectedOutline(selectedPlacement.index);
+  };
+
   renderTooltipForSelection = (): void => {
-    if (selectedCellIndex === null || isContentVisible) {
+    if (!selectedVehicleId || isContentVisible) {
       hideTooltip();
       return;
     }
 
-    const vehiclesInCell = getVehiclesInCell(selectedCellIndex);
+    const selectedVehicle = getSelectedVehicle();
+    if (!selectedVehicle) {
+      clearSelection();
+      return;
+    }
+
+    const selectedPlacement = getVehiclePlacement(selectedVehicle);
+    if (!selectedPlacement) {
+      clearSelection();
+      return;
+    }
+
+    const vehiclesInCell = getVehiclesInCell(selectedPlacement.index);
     if (vehiclesInCell.length === 0) {
       clearSelection();
       return;
     }
 
-    selectedVehicleOffset = wrapIndex(selectedVehicleOffset, vehiclesInCell.length);
+    let selectedVehicleOffset = vehiclesInCell.findIndex((vehicle) => vehicle.id === selectedVehicleId);
+    if (selectedVehicleOffset < 0) {
+      selectedVehicleOffset = 0;
+      selectedVehicleId = vehiclesInCell[0].id;
+    }
+
     const vehicle = vehiclesInCell[selectedVehicleOffset];
     const destination = tooltipMetadata.getDestinationText(vehicle);
     const stopName = tooltipMetadata.getStopText(vehicle);
@@ -293,25 +457,20 @@ function bootstrap(): void {
 
     tooltip.hidden = false;
     tooltip.setAttribute("data-open", "true");
-    positionTooltipForCell(selectedCellIndex);
-  };
-
-  const computeBuffer = (vehicles: Vehicle[]): Float32Array => {
-    const stateByCell = buildCellStateMap(
-      vehicles,
-      routesById,
-      GRID_CONFIG.bounds,
-      baseDims,
-      renderDims,
-      FALLBACK_COLOR_HEX
-    );
-    return buildRgbaBuffer(renderDims.cellCount, stateByCell, OCCUPIED_CELL_ALPHA);
+    positionTooltipForCell(selectedPlacement.index);
   };
 
   const refreshVehicles = async (): Promise<void> => {
     try {
       const vehicles = await fetchVehicles();
       latestVehicles = vehicles;
+      if (selectedVehicleId) {
+        const selectedVehicle = getSelectedVehicle(vehicles);
+        if (!selectedVehicle || !getVehiclePlacement(selectedVehicle)) {
+          clearSelection(false);
+        }
+      }
+
       const nextBuffer = computeBuffer(vehicles);
       renderer.setState(nextBuffer);
 
@@ -321,14 +480,9 @@ function bootstrap(): void {
         });
       }
 
-      if (selectedCellIndex !== null && !isContentVisible) {
-        const vehiclesInSelectedCell = getVehiclesInCell(selectedCellIndex, vehicles);
-        if (vehiclesInSelectedCell.length === 0) {
-          clearSelection();
-        } else {
-          selectedVehicleOffset = Math.min(selectedVehicleOffset, vehiclesInSelectedCell.length - 1);
-          renderTooltipForSelection?.();
-        }
+      if (!isContentVisible && selectedVehicleId) {
+        updateSelectionVisualization?.();
+        renderTooltipForSelection?.();
       }
     } catch (error) {
       console.error("Unable to refresh MBTA vehicles. Keeping current frame.", error);
@@ -355,6 +509,7 @@ function bootstrap(): void {
       return;
     }
 
+    renderer.setState(computeBuffer(latestVehicles));
     void tooltipMetadata.prefetchFromVehicles(latestVehicles).catch((error) => {
       console.error("Unable to prefetch tooltip metadata.", error);
     });
@@ -402,36 +557,74 @@ function bootstrap(): void {
       return;
     }
 
-    selectedCellIndex = clickedCell.index;
-    selectedVehicleOffset = 0;
+    selectedVehicleId = vehiclesInCell[0].id;
+    prefetchSelectedVehicleMetadata(vehiclesInCell[0]);
+    renderer.setState(computeBuffer(latestVehicles));
+    updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
 
   tooltipPrev.addEventListener("click", () => {
-    if (selectedCellIndex === null || isContentVisible) {
+    if (!selectedVehicleId || isContentVisible) {
       return;
     }
 
-    const total = getVehiclesInCell(selectedCellIndex).length;
+    const selectedVehicle = getSelectedVehicle();
+    if (!selectedVehicle) {
+      clearSelection();
+      return;
+    }
+
+    const placement = getVehiclePlacement(selectedVehicle);
+    if (!placement) {
+      clearSelection();
+      return;
+    }
+
+    const vehiclesInCell = getVehiclesInCell(placement.index);
+    const total = vehiclesInCell.length;
     if (total <= 1) {
       return;
     }
 
-    selectedVehicleOffset = wrapIndex(selectedVehicleOffset - 1, total);
+    const currentIndex = Math.max(0, vehiclesInCell.findIndex((vehicle) => vehicle.id === selectedVehicleId));
+    const previousIndex = wrapIndex(currentIndex - 1, total);
+    selectedVehicleId = vehiclesInCell[previousIndex].id;
+    prefetchSelectedVehicleMetadata(vehiclesInCell[previousIndex]);
+    renderer.setState(computeBuffer(latestVehicles));
+    updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
 
   tooltipNext.addEventListener("click", () => {
-    if (selectedCellIndex === null || isContentVisible) {
+    if (!selectedVehicleId || isContentVisible) {
       return;
     }
 
-    const total = getVehiclesInCell(selectedCellIndex).length;
+    const selectedVehicle = getSelectedVehicle();
+    if (!selectedVehicle) {
+      clearSelection();
+      return;
+    }
+
+    const placement = getVehiclePlacement(selectedVehicle);
+    if (!placement) {
+      clearSelection();
+      return;
+    }
+
+    const vehiclesInCell = getVehiclesInCell(placement.index);
+    const total = vehiclesInCell.length;
     if (total <= 1) {
       return;
     }
 
-    selectedVehicleOffset = wrapIndex(selectedVehicleOffset + 1, total);
+    const currentIndex = Math.max(0, vehiclesInCell.findIndex((vehicle) => vehicle.id === selectedVehicleId));
+    const nextIndex = wrapIndex(currentIndex + 1, total);
+    selectedVehicleId = vehiclesInCell[nextIndex].id;
+    prefetchSelectedVehicleMetadata(vehiclesInCell[nextIndex]);
+    renderer.setState(computeBuffer(latestVehicles));
+    updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
 
@@ -457,18 +650,21 @@ function bootstrap(): void {
 
     if (!sameDims(renderDims, nextRenderDims)) {
       renderDims = nextRenderDims;
+      shapeCellCache.clear();
       renderer.stop();
       renderer = createRenderer();
       renderer.setState(computeBuffer(latestVehicles));
-      clearSelection();
       hideHoverOutline();
+      updateSelectionVisualization?.();
+      renderTooltipForSelection?.();
       return;
     }
 
     renderer.resize(window.innerWidth, window.innerHeight);
     hideHoverOutline();
+    updateSelectionVisualization?.();
 
-    if (selectedCellIndex !== null && !isContentVisible) {
+    if (selectedVehicleId !== null && !isContentVisible) {
       renderTooltipForSelection?.();
     }
   });

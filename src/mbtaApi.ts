@@ -5,7 +5,7 @@ import {
   MBTA_TRIPS_ENDPOINT,
   MBTA_VEHICLES_ENDPOINT
 } from "./config";
-import type { RouteMeta, Vehicle, VehicleCurrentStatus } from "./types";
+import type { RouteMeta, TripMetadata, Vehicle, VehicleCurrentStatus } from "./types";
 
 const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
@@ -14,6 +14,7 @@ type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 interface JsonApiDocument<T> {
   data: T[];
+  included?: JsonApiResource[];
   links?: {
     next?: string | null;
   };
@@ -21,6 +22,7 @@ interface JsonApiDocument<T> {
 
 interface JsonApiResource {
   id: string;
+  type?: string;
   attributes?: Record<string, unknown>;
   relationships?: Record<string, unknown>;
 }
@@ -159,6 +161,25 @@ function readTripIdFromRelationships(relationships: Record<string, unknown> | un
   return typeof tripId === "string" ? tripId : null;
 }
 
+function readShapeIdFromRelationships(relationships: Record<string, unknown> | undefined): string | null {
+  if (!relationships) {
+    return null;
+  }
+
+  const shapeRel = relationships["shape"];
+  if (typeof shapeRel !== "object" || shapeRel === null) {
+    return null;
+  }
+
+  const shapeData = (shapeRel as { data?: unknown }).data;
+  if (typeof shapeData !== "object" || shapeData === null) {
+    return null;
+  }
+
+  const shapeId = (shapeData as { id?: unknown }).id;
+  return typeof shapeId === "string" ? shapeId : null;
+}
+
 function normalizeVehicleStatus(value: unknown): VehicleCurrentStatus | null {
   if (value === "IN_TRANSIT_TO" || value === "INCOMING_AT" || value === "STOPPED_AT") {
     return value;
@@ -235,7 +256,9 @@ function buildStopsByIdsUrl(baseUrl: string, endpoint: string, stopIds: string[]
 function buildTripsByIdsUrl(baseUrl: string, endpoint: string, tripIds: string[]): string {
   const url = new URL(endpoint, baseUrl);
   url.searchParams.set("filter[id]", tripIds.join(","));
-  url.searchParams.set("fields[trip]", "headsign");
+  url.searchParams.set("include", "shape");
+  url.searchParams.set("fields[trip]", "headsign,shape");
+  url.searchParams.set("fields[shape]", "polyline");
   url.searchParams.set("page[limit]", "1000");
   return url.toString();
 }
@@ -278,7 +301,7 @@ export async function fetchTripsByIds(
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_TRIPS_ENDPOINT,
   fetchImpl: FetchLike = fetch
-): Promise<Map<string, string>> {
+): Promise<Map<string, TripMetadata>> {
   const uniqueTripIds = Array.from(
     new Set(
       tripIds
@@ -289,19 +312,59 @@ export async function fetchTripsByIds(
   );
 
   if (uniqueTripIds.length === 0) {
-    return new Map<string, string>();
+    return new Map<string, TripMetadata>();
   }
 
   const url = buildTripsByIdsUrl(baseUrl, endpoint, uniqueTripIds);
-  const resources = await fetchPaginated<JsonApiResource>(url, fetchImpl);
-  const destinationByTripId = new Map<string, string>();
+  const tripResources: JsonApiResource[] = [];
+  const shapeResources: JsonApiResource[] = [];
+  const seenUrls = new Set<string>();
 
-  for (const resource of resources) {
-    const destination = normalizeOptionalString(resource.attributes?.["headsign"]);
-    if (destination) {
-      destinationByTripId.set(resource.id, destination);
+  let currentUrl: string | null = url;
+  while (currentUrl) {
+    if (seenUrls.has(currentUrl)) {
+      throw new Error(`Detected pagination cycle at ${currentUrl}`);
+    }
+    seenUrls.add(currentUrl);
+
+    const pageDocument: JsonApiDocument<JsonApiResource> = await fetchJsonDocument<JsonApiResource>(
+      currentUrl,
+      fetchImpl
+    );
+    tripResources.push(...pageDocument.data);
+
+    if (Array.isArray(pageDocument.included)) {
+      for (const includedResource of pageDocument.included) {
+        if (includedResource.type === "shape") {
+          shapeResources.push(includedResource);
+        }
+      }
+    }
+
+    const nextUrl: string | null | undefined = pageDocument.links?.next;
+    currentUrl =
+      typeof nextUrl === "string" && nextUrl.length > 0
+        ? resolveNextUrl(currentUrl, nextUrl)
+        : null;
+  }
+
+  const polylineByShapeId = new Map<string, string>();
+  for (const shapeResource of shapeResources) {
+    const polyline = normalizeOptionalString(shapeResource.attributes?.["polyline"]);
+    if (polyline) {
+      polylineByShapeId.set(shapeResource.id, polyline);
     }
   }
 
-  return destinationByTripId;
+  const metadataByTripId = new Map<string, TripMetadata>();
+  for (const resource of tripResources) {
+    const destination = normalizeOptionalString(resource.attributes?.["headsign"]);
+    const shapeId = readShapeIdFromRelationships(resource.relationships);
+    metadataByTripId.set(resource.id, {
+      destination,
+      shapePolyline: shapeId ? polylineByShapeId.get(shapeId) ?? null : null
+    });
+  }
+
+  return metadataByTripId;
 }

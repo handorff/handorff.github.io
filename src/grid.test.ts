@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCellStateMap,
+  buildSelectedVehicleRgbaBuffer,
   buildRgbaBuffer,
   calculateRenderGridDimensions,
   calculateGridDimensions,
@@ -94,6 +95,39 @@ describe("grid mapping", () => {
     const renderDims = calculateRenderGridDimensions(baseDims, 1600, 900, 40);
     expect(renderDims.cols).toBe(40);
     expect(renderDims.rows).toBe(23);
+  });
+});
+
+describe("selection buffer rendering", () => {
+  it("dims occupied cells, paints shape cells, and overrides selected cell", () => {
+    const stateByCell = new Map([
+      [0, { routeId: "r1", colorHex: "#ff0000", sortOrder: 1 }],
+      [1, { routeId: "r2", colorHex: "#00ff00", sortOrder: 2 }]
+    ]);
+
+    const buffer = buildSelectedVehicleRgbaBuffer(4, stateByCell, {
+      dimmedOccupiedAlpha: 0.2,
+      shapeCellIndices: new Set([2]),
+      shapeColorHex: "#112233",
+      shapeAlpha: 0.7,
+      selectedCellIndex: 1,
+      selectedColorHex: "#445566",
+      selectedAlpha: 0.95
+    });
+
+    expect(buffer[3]).toBeCloseTo(0.2);
+
+    const selectedOffset = 1 * 4;
+    expect(buffer[selectedOffset]).toBe(68);
+    expect(buffer[selectedOffset + 1]).toBe(85);
+    expect(buffer[selectedOffset + 2]).toBe(102);
+    expect(buffer[selectedOffset + 3]).toBeCloseTo(0.95);
+
+    const shapeOffset = 2 * 4;
+    expect(buffer[shapeOffset]).toBe(17);
+    expect(buffer[shapeOffset + 1]).toBe(34);
+    expect(buffer[shapeOffset + 2]).toBe(51);
+    expect(buffer[shapeOffset + 3]).toBeCloseTo(0.7);
   });
 });
 

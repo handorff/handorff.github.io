@@ -1,4 +1,4 @@
-import type { Vehicle } from "./types";
+import type { TripMetadata, Vehicle } from "./types";
 
 export const LOADING_STOP_TEXT = "Loading stop...";
 export const UNKNOWN_STOP_TEXT = "Unknown stop";
@@ -7,7 +7,7 @@ export const UNKNOWN_DESTINATION_TEXT = "Unknown destination";
 
 interface TooltipMetadataStoreOptions {
   fetchStopsByIds: (stopIds: string[]) => Promise<Map<string, string>>;
-  fetchTripsByIds: (tripIds: string[]) => Promise<Map<string, string>>;
+  fetchTripsByIds: (tripIds: string[]) => Promise<Map<string, TripMetadata>>;
   onDataChanged?: () => void;
 }
 
@@ -46,7 +46,7 @@ function selectMissingStopIds(
 
 function selectMissingTripIds(
   vehicles: Vehicle[],
-  tripCache: ReadonlyMap<string, string | null>,
+  tripCache: ReadonlyMap<string, TripMetadata | null>,
   pendingTripIds: ReadonlySet<string>
 ): string[] {
   return Array.from(
@@ -64,11 +64,12 @@ export interface TooltipMetadataStore {
   prefetchFromVehicles: (vehicles: Vehicle[]) => Promise<void>;
   getStopText: (vehicle: Pick<Vehicle, "relatedStopId">) => string;
   getDestinationText: (vehicle: Pick<Vehicle, "relatedTripId" | "destination">) => string;
+  getShapePolyline: (vehicle: Pick<Vehicle, "relatedTripId">) => string | null;
 }
 
 export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions): TooltipMetadataStore {
   const stopCache = new Map<string, string | null>();
-  const tripCache = new Map<string, string | null>();
+  const tripCache = new Map<string, TripMetadata | null>();
   const pendingStopIds = new Set<string>();
   const pendingTripIds = new Set<string>();
 
@@ -111,13 +112,13 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
     const generationAtRequestStart = hiddenModeGeneration;
 
     try {
-      const [namesByStopId, destinationByTripId] = await Promise.all([
+      const [namesByStopId, metadataByTripId] = await Promise.all([
         missingStopIds.length > 0
           ? options.fetchStopsByIds(missingStopIds)
           : Promise.resolve(new Map<string, string>()),
         missingTripIds.length > 0
           ? options.fetchTripsByIds(missingTripIds)
-          : Promise.resolve(new Map<string, string>())
+          : Promise.resolve(new Map<string, TripMetadata>())
       ]);
 
       if (!hiddenModeEnabled || generationAtRequestStart !== hiddenModeGeneration) {
@@ -129,7 +130,7 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
       }
 
       for (const tripId of missingTripIds) {
-        tripCache.set(tripId, destinationByTripId.get(tripId) ?? null);
+        tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
       }
 
       notifyDataChanged();
@@ -168,7 +169,7 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
     const tripId = normalizeId(vehicle.relatedTripId);
     if (tripId) {
       if (tripCache.has(tripId)) {
-        return tripCache.get(tripId) ?? UNKNOWN_DESTINATION_TEXT;
+        return tripCache.get(tripId)?.destination ?? UNKNOWN_DESTINATION_TEXT;
       }
 
       if (hiddenModeEnabled && pendingTripIds.has(tripId)) {
@@ -188,10 +189,20 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
     return UNKNOWN_DESTINATION_TEXT;
   };
 
+  const getShapePolyline = (vehicle: Pick<Vehicle, "relatedTripId">): string | null => {
+    const tripId = normalizeId(vehicle.relatedTripId);
+    if (!tripId) {
+      return null;
+    }
+
+    return tripCache.get(tripId)?.shapePolyline ?? null;
+  };
+
   return {
     setHiddenModeEnabled,
     prefetchFromVehicles,
     getStopText,
-    getDestinationText
+    getDestinationText,
+    getShapePolyline
   };
 }

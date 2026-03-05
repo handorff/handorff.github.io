@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Vehicle } from "./types";
+import type { TripMetadata, Vehicle } from "./types";
 import {
   createTooltipMetadataStore,
   LOADING_DESTINATION_TEXT,
@@ -36,10 +36,17 @@ function createDeferred<T>(): {
   return { promise, resolve, reject };
 }
 
+function tripMetadata(destination: string | null, shapePolyline: string | null = null): TripMetadata {
+  return {
+    destination,
+    shapePolyline
+  };
+}
+
 describe("tooltip metadata store", () => {
   it("does not prefetch while content is visible", async () => {
     const fetchStopsByIds = vi.fn().mockResolvedValue(new Map<string, string>());
-    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, string>());
+    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, TripMetadata>());
     const store = createTooltipMetadataStore({
       fetchStopsByIds,
       fetchTripsByIds
@@ -59,7 +66,7 @@ describe("tooltip metadata store", () => {
       .mockResolvedValue(new Map([["place-cntsq", "Central Square"]]));
     const fetchTripsByIds = vi
       .fn()
-      .mockResolvedValue(new Map([["trip-1", "Harvard"]]));
+      .mockResolvedValue(new Map([["trip-1", tripMetadata("Harvard")]]));
     const store = createTooltipMetadataStore({
       fetchStopsByIds,
       fetchTripsByIds
@@ -80,7 +87,7 @@ describe("tooltip metadata store", () => {
 
   it("dedupes pending IDs across rapid repeated prefetch calls", async () => {
     const deferredStops = createDeferred<Map<string, string>>();
-    const deferredTrips = createDeferred<Map<string, string>>();
+    const deferredTrips = createDeferred<Map<string, TripMetadata>>();
     const fetchStopsByIds = vi.fn().mockReturnValue(deferredStops.promise);
     const fetchTripsByIds = vi.fn().mockReturnValue(deferredTrips.promise);
     const store = createTooltipMetadataStore({
@@ -100,7 +107,7 @@ describe("tooltip metadata store", () => {
     expect(fetchTripsByIds).toHaveBeenCalledTimes(1);
 
     deferredStops.resolve(new Map([["place-cntsq", "Central Square"]]));
-    deferredTrips.resolve(new Map([["trip-1", "Harvard"]]));
+    deferredTrips.resolve(new Map([["trip-1", tripMetadata("Harvard")]]));
     await firstPrefetch;
     await secondPrefetch;
   });
@@ -111,7 +118,7 @@ describe("tooltip metadata store", () => {
       .mockResolvedValue(new Map([["place-cntsq", "Central Square"]]));
     const fetchTripsByIds = vi
       .fn()
-      .mockResolvedValue(new Map([["trip-1", "Harvard"]]));
+      .mockResolvedValue(new Map([["trip-1", tripMetadata("Harvard")]]));
     const store = createTooltipMetadataStore({
       fetchStopsByIds,
       fetchTripsByIds
@@ -127,11 +134,12 @@ describe("tooltip metadata store", () => {
 
     expect(store.getStopText(missingVehicle)).toBe(UNKNOWN_STOP_TEXT);
     expect(store.getDestinationText(missingVehicle)).toBe(UNKNOWN_DESTINATION_TEXT);
+    expect(store.getShapePolyline(missingVehicle)).toBeNull();
   });
 
   it("shows loading text while metadata request is pending, then updates", async () => {
     const deferredStops = createDeferred<Map<string, string>>();
-    const deferredTrips = createDeferred<Map<string, string>>();
+    const deferredTrips = createDeferred<Map<string, TripMetadata>>();
     const fetchStopsByIds = vi.fn().mockReturnValue(deferredStops.promise);
     const fetchTripsByIds = vi.fn().mockReturnValue(deferredTrips.promise);
     const onDataChanged = vi.fn();
@@ -151,13 +159,15 @@ describe("tooltip metadata store", () => {
 
     expect(store.getStopText(vehicle)).toBe(LOADING_STOP_TEXT);
     expect(store.getDestinationText(vehicle)).toBe(LOADING_DESTINATION_TEXT);
+    expect(store.getShapePolyline(vehicle)).toBeNull();
 
     deferredStops.resolve(new Map([["place-cntsq", "Central Square"]]));
-    deferredTrips.resolve(new Map([["trip-1", "Harvard"]]));
+    deferredTrips.resolve(new Map([["trip-1", tripMetadata("Harvard", "encoded-polyline")]]));
     await pendingPrefetch;
 
     expect(store.getStopText(vehicle)).toBe("Central Square");
     expect(store.getDestinationText(vehicle)).toBe("Harvard");
+    expect(store.getShapePolyline(vehicle)).toBe("encoded-polyline");
     expect(onDataChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -166,7 +176,7 @@ describe("tooltip metadata store", () => {
       .fn()
       .mockRejectedValueOnce(new Error("rate limit"))
       .mockResolvedValueOnce(new Map([["place-cntsq", "Central Square"]]));
-    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, string>());
+    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, TripMetadata>());
     const store = createTooltipMetadataStore({
       fetchStopsByIds,
       fetchTripsByIds
@@ -184,7 +194,7 @@ describe("tooltip metadata store", () => {
   it("ignores in-flight response writes if hidden mode is turned off before completion", async () => {
     const deferredStops = createDeferred<Map<string, string>>();
     const fetchStopsByIds = vi.fn().mockReturnValue(deferredStops.promise);
-    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, string>());
+    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, TripMetadata>());
     const store = createTooltipMetadataStore({
       fetchStopsByIds,
       fetchTripsByIds

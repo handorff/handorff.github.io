@@ -37,6 +37,11 @@ export interface TripMeta {
   headsign: string;
 }
 
+export interface TripMetadata {
+  destination: string | null;
+  shapePolyline: string | null;
+}
+
 export interface RouteMeta {
   id: string;
   colorHex: string | null;

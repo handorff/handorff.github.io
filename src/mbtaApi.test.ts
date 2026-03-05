@@ -232,29 +232,111 @@ describe("MBTA resource parsing", () => {
 
   it("maps trip ids to destination names and skips blank headsigns", async () => {
     const fetchMock = createFetchMock({
-      "https://example.test/trips?filter%5Bid%5D=trip-1%2Ctrip-2&fields%5Btrip%5D=headsign&page%5Blimit%5D=1000":
+      "https://example.test/trips?filter%5Bid%5D=trip-1%2Ctrip-2&include=shape&fields%5Btrip%5D=headsign%2Cshape&fields%5Bshape%5D=polyline&page%5Blimit%5D=1000":
         {
           data: [
             {
               id: "trip-1",
-              attributes: { headsign: "Harvard" }
+              attributes: { headsign: "Harvard" },
+              relationships: {
+                shape: { data: { id: "shape-1" } }
+              }
             },
             {
               id: "trip-2",
-              attributes: { headsign: "  " }
+              attributes: { headsign: "  " },
+              relationships: {
+                shape: { data: { id: "shape-2" } }
+              }
+            }
+          ],
+          included: [
+            {
+              id: "shape-1",
+              type: "shape",
+              attributes: { polyline: "encoded-1" }
+            },
+            {
+              id: "shape-2",
+              type: "shape",
+              attributes: { polyline: "encoded-2" }
             }
           ]
         }
     });
 
-    const destinations = await fetchTripsByIds(
+    const metadataByTripId = await fetchTripsByIds(
       ["trip-1", "trip-2"],
       "https://example.test",
       "/trips",
       fetchMock
     );
 
-    expect(destinations).toEqual(new Map([["trip-1", "Harvard"]]));
+    expect(metadataByTripId).toEqual(
+      new Map([
+        [
+          "trip-1",
+          {
+            destination: "Harvard",
+            shapePolyline: "encoded-1"
+          }
+        ],
+        [
+          "trip-2",
+          {
+            destination: null,
+            shapePolyline: "encoded-2"
+          }
+        ]
+      ])
+    );
+  });
+
+  it("sets shapePolyline to null when relationship or included polyline is missing", async () => {
+    const fetchMock = createFetchMock({
+      "https://example.test/trips?filter%5Bid%5D=trip-1%2Ctrip-2&include=shape&fields%5Btrip%5D=headsign%2Cshape&fields%5Bshape%5D=polyline&page%5Blimit%5D=1000":
+        {
+          data: [
+            {
+              id: "trip-1",
+              attributes: { headsign: "Alewife" }
+            },
+            {
+              id: "trip-2",
+              attributes: { headsign: "Park" },
+              relationships: {
+                shape: { data: { id: "shape-2" } }
+              }
+            }
+          ]
+        }
+    });
+
+    const metadataByTripId = await fetchTripsByIds(
+      ["trip-1", "trip-2"],
+      "https://example.test",
+      "/trips",
+      fetchMock
+    );
+
+    expect(metadataByTripId).toEqual(
+      new Map([
+        [
+          "trip-1",
+          {
+            destination: "Alewife",
+            shapePolyline: null
+          }
+        ],
+        [
+          "trip-2",
+          {
+            destination: "Park",
+            shapePolyline: null
+          }
+        ]
+      ])
+    );
   });
 
   it("returns an empty map and does not fetch for empty trip ids", async () => {
