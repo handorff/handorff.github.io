@@ -1,8 +1,11 @@
 import type { GridConfig } from "./types";
 
 export const MBTA_API_BASE_URL = "https://api-v3.mbta.com";
-export const MBTA_VEHICLES_ENDPOINT = "/vehicles?page[limit]=1000";
-export const MBTA_ROUTES_ENDPOINT = "/routes?page[limit]=1000&fields[route]=color,sort_order";
+export const MBTA_VEHICLES_ENDPOINT =
+  "/vehicles?page[limit]=1000&fields[vehicle]=latitude,longitude,current_status,destination,route,stop,trip&include=route,stop,trip";
+export const MBTA_ROUTES_ENDPOINT = "/routes?page[limit]=1000&fields[route]=color,sort_order,short_name,long_name";
+export const MBTA_STOPS_ENDPOINT = "/stops";
+export const MBTA_TRIPS_ENDPOINT = "/trips";
 
 const MAP_SPAN_LAT = 0.115;
 const MAP_SPAN_LON = 0.192;

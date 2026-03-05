@@ -19,12 +19,30 @@ export interface Vehicle {
   routeId: string | null;
   latitude: number;
   longitude: number;
+  destination: string | null;
+  currentStatus: VehicleCurrentStatus | null;
+  relatedStopId: string | null;
+  relatedTripId: string | null;
+}
+
+export type VehicleCurrentStatus = "IN_TRANSIT_TO" | "INCOMING_AT" | "STOPPED_AT";
+
+export interface StopMeta {
+  id: string;
+  name: string;
+}
+
+export interface TripMeta {
+  id: string;
+  headsign: string;
 }
 
 export interface RouteMeta {
   id: string;
   colorHex: string | null;
   sortOrder: number;
+  shortName: string | null;
+  longName: string | null;
 }
 
 export interface CellState {
@@ -32,4 +50,3 @@ export interface CellState {
   colorHex: string;
   sortOrder: number;
 }
-

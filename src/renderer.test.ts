@@ -105,3 +105,47 @@ describe("GridRenderer grid line color", () => {
     expect(context.strokeStyle).toBe(updatedColor);
   });
 });
+
+describe("GridRenderer geometry helpers", () => {
+  it("maps viewport points inside the grid to a cell", () => {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+
+    expect(renderer.getCellFromViewportPoint(15, 15)).toEqual({
+      row: 0,
+      col: 0,
+      index: 0
+    });
+    expect(renderer.getCellFromViewportPoint(26, 15)).toEqual({
+      row: 0,
+      col: 1,
+      index: 1
+    });
+  });
+
+  it("returns null for points outside the rendered grid bounds", () => {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+
+    expect(renderer.getCellFromViewportPoint(0, 0)).toBeNull();
+    expect(renderer.getCellFromViewportPoint(39, 39)).toBeNull();
+  });
+
+  it("returns viewport-space rects that align to cell pitch and grid offset", () => {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+
+    expect(renderer.getCellRect(0, 0)).toEqual({
+      left: 10,
+      top: 10,
+      width: 10,
+      height: 10
+    });
+    expect(renderer.getCellRect(1, 1)).toEqual({
+      left: 20,
+      top: 20,
+      width: 10,
+      height: 10
+    });
+  });
+});

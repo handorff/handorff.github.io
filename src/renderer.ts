@@ -8,6 +8,29 @@ interface RendererOptions {
   gridLineColor?: string;
 }
 
+export interface CellCoordinates {
+  row: number;
+  col: number;
+  index: number;
+}
+
+export interface CellRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface GridMetrics {
+  pitch: number;
+  fillSize: number;
+  inset: number;
+  gridWidthPx: number;
+  gridHeightPx: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 function clamp01(value: number): number {
   return Math.min(Math.max(value, 0), 1);
 }
@@ -80,7 +103,9 @@ export class GridRenderer {
   public resize(widthPx: number = window.innerWidth, heightPx: number = window.innerHeight): void {
     this.viewportWidthPx = widthPx;
     this.viewportHeightPx = heightPx;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const devicePixelRatio =
+      typeof window === "undefined" ? 1 : (window.devicePixelRatio || 1);
+    this.dpr = Math.min(devicePixelRatio, 2);
 
     this.ctx.canvas.width = Math.max(1, Math.floor(widthPx * this.dpr));
     this.ctx.canvas.height = Math.max(1, Math.floor(heightPx * this.dpr));
@@ -121,6 +146,38 @@ export class GridRenderer {
     this.gridLineColor = color;
   }
 
+  public getCellFromViewportPoint(x: number, y: number): CellCoordinates | null {
+    const metrics = this.getGridMetrics();
+
+    if (
+      x < metrics.offsetX ||
+      y < metrics.offsetY ||
+      x >= metrics.offsetX + metrics.gridWidthPx ||
+      y >= metrics.offsetY + metrics.gridHeightPx
+    ) {
+      return null;
+    }
+
+    const col = Math.floor((x - metrics.offsetX) / metrics.pitch);
+    const row = Math.floor((y - metrics.offsetY) / metrics.pitch);
+    const index = row * this.cols + col;
+    return { row, col, index };
+  }
+
+  public getCellRect(row: number, col: number): CellRect {
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+      throw new Error(`Cell out of range: row=${row}, col=${col}`);
+    }
+
+    const metrics = this.getGridMetrics();
+    return {
+      left: metrics.offsetX + col * metrics.pitch,
+      top: metrics.offsetY + row * metrics.pitch,
+      width: metrics.pitch,
+      height: metrics.pitch
+    };
+  }
+
   private draw(nowMs: number): void {
     const progress = this.transitionMs <= 0 ? 1 : (nowMs - this.transitionStartMs) / this.transitionMs;
     interpolateBuffers(this.fromBuffer, this.toBuffer, progress, this.frameBuffer);
@@ -128,16 +185,16 @@ export class GridRenderer {
   }
 
   private drawFrame(buffer: Float32Array): void {
-    const pitch = this.cellSizePx;
-    const fillSize = Math.max(0, this.cellSizePx - this.cellGapPx);
-    const inset = (pitch - fillSize) / 2;
-    const gridWidthPx = this.cols * pitch;
-    const gridHeightPx = this.rows * pitch;
-    const offsetX = (this.viewportWidthPx - gridWidthPx) / 2;
-    const offsetY = (this.viewportHeightPx - gridHeightPx) / 2;
+    const metrics = this.getGridMetrics();
 
     this.ctx.clearRect(0, 0, this.viewportWidthPx, this.viewportHeightPx);
-    this.drawGridLines(offsetX, offsetY, gridWidthPx, gridHeightPx, pitch);
+    this.drawGridLines(
+      metrics.offsetX,
+      metrics.offsetY,
+      metrics.gridWidthPx,
+      metrics.gridHeightPx,
+      metrics.pitch
+    );
 
     for (let row = 0; row < this.rows; row += 1) {
       for (let col = 0; col < this.cols; col += 1) {
@@ -151,13 +208,33 @@ export class GridRenderer {
 
         this.ctx.fillStyle = `rgba(${Math.round(buffer[offset])}, ${Math.round(buffer[offset + 1])}, ${Math.round(buffer[offset + 2])}, ${alpha.toFixed(4)})`;
         this.ctx.fillRect(
-          offsetX + col * pitch + inset,
-          offsetY + row * pitch + inset,
-          fillSize,
-          fillSize
+          metrics.offsetX + col * metrics.pitch + metrics.inset,
+          metrics.offsetY + row * metrics.pitch + metrics.inset,
+          metrics.fillSize,
+          metrics.fillSize
         );
       }
     }
+  }
+
+  private getGridMetrics(): GridMetrics {
+    const pitch = this.cellSizePx;
+    const fillSize = Math.max(0, this.cellSizePx - this.cellGapPx);
+    const inset = (pitch - fillSize) / 2;
+    const gridWidthPx = this.cols * pitch;
+    const gridHeightPx = this.rows * pitch;
+    const offsetX = (this.viewportWidthPx - gridWidthPx) / 2;
+    const offsetY = (this.viewportHeightPx - gridHeightPx) / 2;
+
+    return {
+      pitch,
+      fillSize,
+      inset,
+      gridWidthPx,
+      gridHeightPx,
+      offsetX,
+      offsetY
+    };
   }
 
   private drawGridLines(

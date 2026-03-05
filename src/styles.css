@@ -59,6 +59,87 @@ body {
   background: transparent;
 }
 
+#grid-hover-outline {
+  position: fixed;
+  z-index: 2;
+  border: 2px solid #111111;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 80ms linear;
+}
+
+#grid-hover-outline[data-visible="true"] {
+  opacity: 1;
+}
+
+#vehicle-tooltip {
+  position: fixed;
+  z-index: 3;
+  width: min(360px, calc(100vw - 1.5rem));
+  box-sizing: border-box;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.15);
+  background: rgba(255, 255, 255, 0.96);
+  color: #111827;
+  padding: 1rem;
+  box-shadow: 0 20px 45px rgba(17, 24, 39, 0.2);
+  pointer-events: auto;
+}
+
+#vehicle-tooltip[data-open="false"] {
+  display: none;
+}
+
+#vehicle-tooltip-title {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.2;
+}
+
+#vehicle-tooltip-status-line {
+  margin: 0.55rem 0 0;
+  font-size: 1.02rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.vehicle-tooltip-separator {
+  margin: 0 0.15rem;
+}
+
+.vehicle-tooltip-nav {
+  margin-top: 0.95rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.vehicle-tooltip-nav button {
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid rgba(17, 24, 39, 0.2);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.vehicle-tooltip-nav button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+#vehicle-tooltip-index {
+  min-width: 3.2rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 #controls {
   margin-left: auto;
   display: flex;
@@ -148,5 +229,10 @@ body {
   .toggle-control {
     font-size: 0.82rem;
     padding: 0.36rem 0.58rem;
+  }
+
+  #vehicle-tooltip {
+    width: min(92vw, 420px);
+    padding: 0.9rem;
   }
 }

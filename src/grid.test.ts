@@ -112,12 +112,30 @@ describe("cell winner selection", () => {
 
   it("uses the route with the smallest sort_order in a shared cell", () => {
     const vehicles: Vehicle[] = [
-      { id: "v1", routeId: "r1", latitude: 9.9, longitude: 0.1 },
-      { id: "v2", routeId: "r2", latitude: 9.8, longitude: 0.2 }
+      {
+        id: "v1",
+        routeId: "r1",
+        latitude: 9.9,
+        longitude: 0.1,
+        destination: null,
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
+      },
+      {
+        id: "v2",
+        routeId: "r2",
+        latitude: 9.8,
+        longitude: 0.2,
+        destination: null,
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
+      }
     ];
     const routesById = new Map<string, RouteMeta>([
-      ["r1", { id: "r1", colorHex: "#ff0000", sortOrder: 5 }],
-      ["r2", { id: "r2", colorHex: "#00ff00", sortOrder: 1 }]
+      ["r1", { id: "r1", colorHex: "#ff0000", sortOrder: 5, shortName: "R1", longName: "Route 1" }],
+      ["r2", { id: "r2", colorHex: "#00ff00", sortOrder: 1, shortName: "R2", longName: "Route 2" }]
     ]);
 
     const stateByCell = buildCellStateMap(vehicles, routesById, bounds, dims, dims, "#5f7380");
@@ -128,12 +146,36 @@ describe("cell winner selection", () => {
 
   it("uses route id lexical order as tie-breaker for equal sort_order", () => {
     const vehicles: Vehicle[] = [
-      { id: "v1", routeId: "z-route", latitude: 9.9, longitude: 0.1 },
-      { id: "v2", routeId: "a-route", latitude: 9.8, longitude: 0.2 }
+      {
+        id: "v1",
+        routeId: "z-route",
+        latitude: 9.9,
+        longitude: 0.1,
+        destination: null,
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
+      },
+      {
+        id: "v2",
+        routeId: "a-route",
+        latitude: 9.8,
+        longitude: 0.2,
+        destination: null,
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
+      }
     ];
     const routesById = new Map<string, RouteMeta>([
-      ["z-route", { id: "z-route", colorHex: "#aaaaaa", sortOrder: 10 }],
-      ["a-route", { id: "a-route", colorHex: "#bbbbbb", sortOrder: 10 }]
+      [
+        "z-route",
+        { id: "z-route", colorHex: "#aaaaaa", sortOrder: 10, shortName: "Z", longName: "Z Route" }
+      ],
+      [
+        "a-route",
+        { id: "a-route", colorHex: "#bbbbbb", sortOrder: 10, shortName: "A", longName: "A Route" }
+      ]
     ]);
 
     const stateByCell = buildCellStateMap(vehicles, routesById, bounds, dims, dims, "#5f7380");
@@ -142,10 +184,19 @@ describe("cell winner selection", () => {
 
   it("falls back to configured color when route color is missing", () => {
     const vehicles: Vehicle[] = [
-      { id: "v1", routeId: "r1", latitude: 9.9, longitude: 0.1 }
+      {
+        id: "v1",
+        routeId: "r1",
+        latitude: 9.9,
+        longitude: 0.1,
+        destination: null,
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
+      }
     ];
     const routesById = new Map<string, RouteMeta>([
-      ["r1", { id: "r1", colorHex: null, sortOrder: 1 }]
+      ["r1", { id: "r1", colorHex: null, sortOrder: 1, shortName: "R1", longName: "Route 1" }]
     ]);
 
     const stateByCell = buildCellStateMap(vehicles, routesById, bounds, dims, dims, "#5f7380");

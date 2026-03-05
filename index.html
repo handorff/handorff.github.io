@@ -40,6 +40,20 @@
         </section>
       </main>
     </div>
+    <div id="grid-hover-outline" data-visible="false" aria-hidden="true"></div>
+    <section id="vehicle-tooltip" data-open="false" hidden aria-live="polite">
+      <h3 id="vehicle-tooltip-title"></h3>
+      <p id="vehicle-tooltip-status-line">
+        <span id="vehicle-tooltip-status"></span>
+        <span class="vehicle-tooltip-separator">:</span>
+        <span id="vehicle-tooltip-stop">Unknown stop</span>
+      </p>
+      <div class="vehicle-tooltip-nav">
+        <button id="vehicle-tooltip-prev" type="button" aria-label="Previous vehicle">&larr;</button>
+        <span id="vehicle-tooltip-index">1/1</span>
+        <button id="vehicle-tooltip-next" type="button" aria-label="Next vehicle">&rarr;</button>
+      </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

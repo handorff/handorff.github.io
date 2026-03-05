@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  fetchStopsByIds,
+  fetchTripsByIds,
   fetchPaginated,
   fetchRoutes,
   fetchVehicles,
@@ -80,8 +82,17 @@ describe("MBTA resource parsing", () => {
         data: [
           {
             id: "v1",
-            attributes: { latitude: 42.36, longitude: -71.08 },
-            relationships: { route: { data: { id: "Red" } } }
+            attributes: {
+              latitude: 42.36,
+              longitude: -71.08,
+              destination: "Harvard",
+              current_status: "IN_TRANSIT_TO"
+            },
+            relationships: {
+              route: { data: { id: "Red" } },
+              stop: { data: { id: "place-cntsq" } },
+              trip: { data: { id: "trip-1" } }
+            }
           },
           {
             id: "v2",
@@ -98,7 +109,43 @@ describe("MBTA resource parsing", () => {
         id: "v1",
         routeId: "Red",
         latitude: 42.36,
-        longitude: -71.08
+        longitude: -71.08,
+        destination: "Harvard",
+        currentStatus: "IN_TRANSIT_TO",
+        relatedStopId: "place-cntsq",
+        relatedTripId: "trip-1"
+      }
+    ]);
+  });
+
+  it("maps unknown vehicle status to null", async () => {
+    const fetchMock = createFetchMock({
+      "https://example.test/vehicles": {
+        data: [
+          {
+            id: "v1",
+            attributes: {
+              latitude: 42.36,
+              longitude: -71.08,
+              destination: "Forest Hills",
+              current_status: "DELAYED"
+            }
+          }
+        ]
+      }
+    });
+
+    const vehicles = await fetchVehicles("https://example.test", "/vehicles", fetchMock);
+    expect(vehicles).toEqual([
+      {
+        id: "v1",
+        routeId: null,
+        latitude: 42.36,
+        longitude: -71.08,
+        destination: "Forest Hills",
+        currentStatus: null,
+        relatedStopId: null,
+        relatedTripId: null
       }
     ]);
   });
@@ -109,11 +156,21 @@ describe("MBTA resource parsing", () => {
         data: [
           {
             id: "Red",
-            attributes: { color: "DA291C", sort_order: 10 }
+            attributes: {
+              color: "DA291C",
+              sort_order: 10,
+              short_name: "Red",
+              long_name: "Red Line"
+            }
           },
           {
             id: "Mystery",
-            attributes: { color: "invalid", sort_order: null }
+            attributes: {
+              color: "invalid",
+              sort_order: null,
+              short_name: "",
+              long_name: "Mystery Long Name"
+            }
           }
         ]
       }
@@ -121,9 +178,90 @@ describe("MBTA resource parsing", () => {
 
     const routes = await fetchRoutes("https://example.test", "/routes", fetchMock);
     expect(routes).toEqual([
-      { id: "Red", colorHex: "#da291c", sortOrder: 10 },
-      { id: "Mystery", colorHex: null, sortOrder: Number.POSITIVE_INFINITY }
+      {
+        id: "Red",
+        colorHex: "#da291c",
+        sortOrder: 10,
+        shortName: "Red",
+        longName: "Red Line"
+      },
+      {
+        id: "Mystery",
+        colorHex: null,
+        sortOrder: Number.POSITIVE_INFINITY,
+        shortName: null,
+        longName: "Mystery Long Name"
+      }
     ]);
   });
-});
 
+  it("maps stop ids to stop names and skips blank names", async () => {
+    const fetchMock = createFetchMock({
+      "https://example.test/stops?filter%5Bid%5D=place-alfcl%2Cplace-cntsq&fields%5Bstop%5D=name&page%5Blimit%5D=1000":
+        {
+          data: [
+            {
+              id: "place-alfcl",
+              attributes: { name: "Alewife" }
+            },
+            {
+              id: "place-cntsq",
+              attributes: { name: "   " }
+            }
+          ]
+        }
+    });
+
+    const stops = await fetchStopsByIds(
+      ["place-alfcl", "place-cntsq"],
+      "https://example.test",
+      "/stops",
+      fetchMock
+    );
+
+    expect(stops).toEqual(new Map([["place-alfcl", "Alewife"]]));
+  });
+
+  it("returns an empty map and does not fetch for empty stop ids", async () => {
+    const fetchMock = vi.fn();
+    const result = await fetchStopsByIds([], "https://example.test", "/stops", fetchMock);
+
+    expect(result).toEqual(new Map());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps trip ids to destination names and skips blank headsigns", async () => {
+    const fetchMock = createFetchMock({
+      "https://example.test/trips?filter%5Bid%5D=trip-1%2Ctrip-2&fields%5Btrip%5D=headsign&page%5Blimit%5D=1000":
+        {
+          data: [
+            {
+              id: "trip-1",
+              attributes: { headsign: "Harvard" }
+            },
+            {
+              id: "trip-2",
+              attributes: { headsign: "  " }
+            }
+          ]
+        }
+    });
+
+    const destinations = await fetchTripsByIds(
+      ["trip-1", "trip-2"],
+      "https://example.test",
+      "/trips",
+      fetchMock
+    );
+
+    expect(destinations).toEqual(new Map([["trip-1", "Harvard"]]));
+  });
+
+  it("returns an empty map and does not fetch for empty trip ids", async () => {
+    const fetchMock = vi.fn();
+    const result = await fetchTripsByIds([], "https://example.test", "/trips", fetchMock);
+
+    expect(result).toEqual(new Map());
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
