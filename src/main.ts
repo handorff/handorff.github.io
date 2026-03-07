@@ -494,12 +494,9 @@ function bootstrap(): void {
     task: refreshVehicles
   });
 
-  const onVisibilityChange = (): void => {
-    pollingLoop.setPaused(document.hidden);
-  };
-
-  contentVisibilityToggle.addEventListener("change", () => {
-    isContentVisible = contentVisibilityToggle.checked;
+  const setContentVisibility = (visible: boolean): void => {
+    isContentVisible = visible;
+    contentVisibilityToggle.checked = visible;
     tooltipMetadata.setHiddenModeEnabled(!isContentVisible);
     setContentLayerVisible(content, contentOverlay, isContentVisible);
 
@@ -513,6 +510,14 @@ function bootstrap(): void {
     void tooltipMetadata.prefetchFromVehicles(latestVehicles).catch((error) => {
       console.error("Unable to prefetch tooltip metadata.", error);
     });
+  };
+
+  const onVisibilityChange = (): void => {
+    pollingLoop.setPaused(document.hidden);
+  };
+
+  contentVisibilityToggle.addEventListener("change", () => {
+    setContentVisibility(contentVisibilityToggle.checked);
   });
 
   darkModeToggle.addEventListener("change", () => {
@@ -542,6 +547,7 @@ function bootstrap(): void {
 
   canvas.addEventListener("click", (event) => {
     if (isContentVisible) {
+      setContentVisibility(false);
       return;
     }
 
