@@ -26,7 +26,8 @@ export function applyTheme(theme: ThemeMode, body: HTMLElement = document.body):
 }
 
 export function setContentVisible(content: HTMLElement, visible: boolean): void {
-  content.hidden = !visible;
+  content.inert = !visible;
+  content.setAttribute("aria-hidden", String(!visible));
 }
 
 export function setContentLayerVisible(

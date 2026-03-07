@@ -50,13 +50,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  background: var(--overlay-bg);
+  background-color: var(--overlay-bg);
   pointer-events: none;
   overflow: auto;
+  transition: background-color 220ms ease;
 }
 
 #content-overlay[data-content-visible="false"] {
-  background: transparent;
+  background-color: transparent;
 }
 
 #grid-hover-outline {
@@ -189,6 +190,19 @@ body {
   border-radius: 16px;
   padding: clamp(1.1rem, 2.2vw, 1.7rem);
   box-shadow: 0 14px 34px rgba(17, 24, 39, 0.08);
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transform-origin: top center;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+  will-change: opacity, transform;
+}
+
+#content-overlay[data-content-visible="false"] #site-content {
+  opacity: 0;
+  transform: translateY(1rem) scale(0.985);
+  pointer-events: none;
 }
 
 #site-content h1 {

@@ -27,17 +27,31 @@ describe("UI helpers", () => {
   });
 
   it("toggles content visibility using hidden", () => {
-    const content = { hidden: false } as HTMLElement;
+    const attributes = new Map<string, string>();
+    const content = {
+      inert: false,
+      setAttribute: (name: string, value: string) => {
+        attributes.set(name, value);
+      }
+    } as unknown as HTMLElement;
 
     setContentVisible(content, false);
-    expect(content.hidden).toBe(true);
+    expect(content.inert).toBe(true);
+    expect(attributes.get("aria-hidden")).toBe("true");
 
     setContentVisible(content, true);
-    expect(content.hidden).toBe(false);
+    expect(content.inert).toBe(false);
+    expect(attributes.get("aria-hidden")).toBe("false");
   });
 
   it("toggles both content and overlay visibility state", () => {
-    const content = { hidden: false } as HTMLElement;
+    const contentAttributes = new Map<string, string>();
+    const content = {
+      inert: false,
+      setAttribute: (name: string, value: string) => {
+        contentAttributes.set(name, value);
+      }
+    } as unknown as HTMLElement;
     const attributes = new Map<string, string>();
     const overlay = {
       setAttribute: (name: string, value: string) => {
@@ -46,11 +60,13 @@ describe("UI helpers", () => {
     } as unknown as HTMLElement;
 
     setContentLayerVisible(content, overlay, false);
-    expect(content.hidden).toBe(true);
+    expect(content.inert).toBe(true);
+    expect(contentAttributes.get("aria-hidden")).toBe("true");
     expect(attributes.get("data-content-visible")).toBe("false");
 
     setContentLayerVisible(content, overlay, true);
-    expect(content.hidden).toBe(false);
+    expect(content.inert).toBe(false);
+    expect(contentAttributes.get("aria-hidden")).toBe("false");
     expect(attributes.get("data-content-visible")).toBe("true");
   });
 
