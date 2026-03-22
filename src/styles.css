@@ -120,6 +120,37 @@ body {
   font-weight: 600;
 }
 
+#vehicle-tooltip-debug {
+  margin: 0.85rem 0 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+#vehicle-tooltip-debug[hidden] {
+  display: none !important;
+}
+
+.vehicle-tooltip-debug-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.vehicle-tooltip-debug-row dt {
+  margin: 0;
+  color: rgba(17, 24, 39, 0.68);
+  font-weight: 700;
+}
+
+.vehicle-tooltip-debug-row dd {
+  margin: 0;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
+  font-size: 0.8rem;
+  justify-self: end;
+}
+
 .vehicle-tooltip-separator {
   margin: 0 0.15rem;
 }
@@ -156,6 +187,45 @@ body {
   font-weight: 700;
 }
 
+#debug-footer {
+  position: fixed;
+  right: clamp(0.75rem, 2vw, 1.4rem);
+  bottom: clamp(0.75rem, 2vw, 1.2rem);
+  z-index: 2;
+  display: grid;
+  gap: 0.32rem;
+  min-width: min(280px, calc(100vw - 1.5rem));
+  box-sizing: border-box;
+  padding: 0.72rem 0.82rem;
+  border-radius: 12px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 30px rgba(17, 24, 39, 0.12);
+  pointer-events: none;
+}
+
+#debug-footer[hidden] {
+  display: none !important;
+}
+
+.debug-footer-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.debug-footer-label {
+  color: rgba(17, 24, 39, 0.68);
+  font-weight: 700;
+}
+
+#debug-footer span:last-child {
+  font-family: "IBM Plex Mono", "SFMono-Regular", "SF Mono", Consolas, monospace;
+  font-size: 0.76rem;
+}
+
 #controls {
   margin-left: auto;
   display: flex;
@@ -179,6 +249,24 @@ body {
 .toggle-control input {
   margin: 0;
   accent-color: #111827;
+}
+
+body[data-theme="dark"] #vehicle-tooltip,
+body[data-theme="dark"] #debug-footer {
+  border-color: rgba(229, 231, 235, 0.14);
+  background: rgba(34, 40, 45, 0.94);
+  color: #f9fafb;
+}
+
+body[data-theme="dark"] .vehicle-tooltip-debug-row dt,
+body[data-theme="dark"] .debug-footer-label {
+  color: rgba(229, 231, 235, 0.7);
+}
+
+body[data-theme="dark"] .vehicle-tooltip-nav button {
+  border-color: rgba(229, 231, 235, 0.18);
+  background: rgba(17, 24, 39, 0.8);
+  color: #f9fafb;
 }
 
 #site-content {
@@ -263,5 +351,10 @@ body {
   #vehicle-tooltip {
     width: min(92vw, 420px);
     padding: 0.9rem;
+  }
+
+  #debug-footer {
+    min-width: min(260px, calc(100vw - 1rem));
+    padding: 0.64rem 0.72rem;
   }
 }

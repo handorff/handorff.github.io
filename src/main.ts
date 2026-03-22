@@ -4,6 +4,12 @@ import {
   OCCUPIED_CELL_ALPHA
 } from "./config";
 import {
+  DEBUG_SOURCE_KEYS,
+  type DebugSourceKey,
+  formatDebugTimestamp,
+  isDebugModeEnabled
+} from "./debug";
+import {
   calculateRenderGridDimensions,
   buildCellStateMap,
   buildSelectedVehicleRgbaBuffer,
@@ -79,7 +85,17 @@ function sameDims(
   return a.rows === b.rows && a.cols === b.cols;
 }
 
+function createEmptyDebugSourceMap(): Record<DebugSourceKey, Date | null> {
+  return {
+    vehicles: null,
+    routes: null,
+    stops: null,
+    trips: null
+  };
+}
+
 function bootstrap(): void {
+  const debugModeEnabled = isDebugModeEnabled(window.location.search);
   const canvas = requireCanvas("#grid-canvas");
   const contentOverlay = requireHtmlElement("#content-overlay");
   const content = requireHtmlElement("#site-content");
@@ -92,8 +108,19 @@ function bootstrap(): void {
   const tooltipStatus = requireHtmlElement("#vehicle-tooltip-status");
   const tooltipStop = requireHtmlElement("#vehicle-tooltip-stop");
   const tooltipIndex = requireHtmlElement("#vehicle-tooltip-index");
+  const tooltipDebug = requireHtmlElement("#vehicle-tooltip-debug");
+  const tooltipDebugRouteId = requireHtmlElement("#vehicle-tooltip-debug-route-id");
+  const tooltipDebugTripId = requireHtmlElement("#vehicle-tooltip-debug-trip-id");
+  const tooltipDebugStopId = requireHtmlElement("#vehicle-tooltip-debug-stop-id");
   const tooltipPrev = requireButton("#vehicle-tooltip-prev");
   const tooltipNext = requireButton("#vehicle-tooltip-next");
+  const debugFooter = requireHtmlElement("#debug-footer");
+  const debugFooterTimestampBySource: Record<DebugSourceKey, HTMLElement> = {
+    vehicles: requireHtmlElement("#debug-footer-vehicles-updated"),
+    routes: requireHtmlElement("#debug-footer-routes-updated"),
+    stops: requireHtmlElement("#debug-footer-stops-updated"),
+    trips: requireHtmlElement("#debug-footer-trips-updated")
+  };
   const themeState = createThemeState("light");
   const finePointerMediaQuery =
     typeof window.matchMedia === "function"
@@ -108,6 +135,8 @@ function bootstrap(): void {
   selectedOutline.setAttribute("data-visible", "false");
   tooltip.setAttribute("data-open", "false");
   tooltip.hidden = true;
+  tooltipDebug.hidden = !debugModeEnabled;
+  debugFooter.hidden = !debugModeEnabled;
 
   const baseDims = calculateGridDimensions(GRID_CONFIG);
   let renderDims = calculateRenderGridDimensions(
@@ -138,12 +167,38 @@ function bootstrap(): void {
   let isContentVisible = true;
   let selectedVehicleId: string | null = null;
   const shapeCellCache = new Map<string, { polyline: string; cellIndices: Set<number> }>();
+  const debugSourceUpdatedAt = createEmptyDebugSourceMap();
   let renderTooltipForSelection: (() => void) | null = null;
   let updateSelectionVisualization: (() => void) | null = null;
 
+  const renderDebugFooter = (): void => {
+    if (!debugModeEnabled) {
+      return;
+    }
+
+    for (const sourceKey of DEBUG_SOURCE_KEYS) {
+      debugFooterTimestampBySource[sourceKey].textContent = formatDebugTimestamp(
+        debugSourceUpdatedAt[sourceKey]
+      );
+    }
+  };
+
+  const markDebugSourceUpdated = (sourceKey: DebugSourceKey): void => {
+    debugSourceUpdatedAt[sourceKey] = new Date();
+    renderDebugFooter();
+  };
+
   const tooltipMetadata = createTooltipMetadataStore({
-    fetchStopsByIds,
-    fetchTripsByIds,
+    fetchStopsByIds: async (stopIds) => {
+      const result = await fetchStopsByIds(stopIds);
+      markDebugSourceUpdated("stops");
+      return result;
+    },
+    fetchTripsByIds: async (tripIds) => {
+      const result = await fetchTripsByIds(tripIds);
+      markDebugSourceUpdated("trips");
+      return result;
+    },
     onDataChanged: () => {
       if (selectedVehicleId !== null && !isContentVisible) {
         renderer.setState(computeBuffer(latestVehicles));
@@ -190,6 +245,8 @@ function bootstrap(): void {
     const trimmed = id.trim();
     return trimmed.length > 0 ? trimmed : null;
   };
+
+  const formatDebugId = (id: string | null): string => normalizeId(id) ?? "Unknown";
 
   const hideHoverOutline = (): void => {
     hoverOutline.setAttribute("data-visible", "false");
@@ -450,6 +507,11 @@ function bootstrap(): void {
     tooltipStatus.textContent = formatVehicleStatusLabel(vehicle.currentStatus);
     tooltipStop.textContent = stopName;
     tooltipIndex.textContent = `${selectedVehicleOffset + 1}/${vehiclesInCell.length}`;
+    if (debugModeEnabled) {
+      tooltipDebugRouteId.textContent = formatDebugId(vehicle.routeId);
+      tooltipDebugTripId.textContent = formatDebugId(vehicle.relatedTripId);
+      tooltipDebugStopId.textContent = formatDebugId(vehicle.relatedStopId);
+    }
 
     const disablePagination = vehiclesInCell.length <= 1;
     tooltipPrev.disabled = disablePagination;
@@ -463,6 +525,7 @@ function bootstrap(): void {
   const refreshVehicles = async (): Promise<void> => {
     try {
       const vehicles = await fetchVehicles();
+      markDebugSourceUpdated("vehicles");
       latestVehicles = vehicles;
       if (selectedVehicleId) {
         const selectedVehicle = getSelectedVehicle(vehicles);
@@ -493,6 +556,8 @@ function bootstrap(): void {
     intervalMs: GRID_CONFIG.pollIntervalMs,
     task: refreshVehicles
   });
+
+  renderDebugFooter();
 
   const setContentVisibility = (visible: boolean): void => {
     isContentVisible = visible;
@@ -637,6 +702,7 @@ function bootstrap(): void {
   void (async () => {
     try {
       const routes = await fetchRoutes();
+      markDebugSourceUpdated("routes");
       routesById = createRouteMap(routes);
     } catch (error) {
       console.error("Unable to fetch MBTA routes. Using fallback color.", error);

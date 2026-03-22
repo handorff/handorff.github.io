@@ -49,12 +49,44 @@
         <span class="vehicle-tooltip-separator">:</span>
         <span id="vehicle-tooltip-stop">Unknown stop</span>
       </p>
+      <dl id="vehicle-tooltip-debug" hidden>
+        <div class="vehicle-tooltip-debug-row">
+          <dt>Route ID</dt>
+          <dd id="vehicle-tooltip-debug-route-id">Unknown</dd>
+        </div>
+        <div class="vehicle-tooltip-debug-row">
+          <dt>Trip ID</dt>
+          <dd id="vehicle-tooltip-debug-trip-id">Unknown</dd>
+        </div>
+        <div class="vehicle-tooltip-debug-row">
+          <dt>Stop ID</dt>
+          <dd id="vehicle-tooltip-debug-stop-id">Unknown</dd>
+        </div>
+      </dl>
       <div class="vehicle-tooltip-nav">
         <button id="vehicle-tooltip-prev" type="button" aria-label="Previous vehicle">&larr;</button>
         <span id="vehicle-tooltip-index">1/1</span>
         <button id="vehicle-tooltip-next" type="button" aria-label="Next vehicle">&rarr;</button>
       </div>
     </section>
+    <aside id="debug-footer" hidden aria-live="polite">
+      <div class="debug-footer-row">
+        <span class="debug-footer-label">Vehicles</span>
+        <span id="debug-footer-vehicles-updated">Not loaded</span>
+      </div>
+      <div class="debug-footer-row">
+        <span class="debug-footer-label">Routes</span>
+        <span id="debug-footer-routes-updated">Not loaded</span>
+      </div>
+      <div class="debug-footer-row">
+        <span class="debug-footer-label">Stops</span>
+        <span id="debug-footer-stops-updated">Not loaded</span>
+      </div>
+      <div class="debug-footer-row">
+        <span class="debug-footer-label">Trips</span>
+        <span id="debug-footer-trips-updated">Not loaded</span>
+      </div>
+    </aside>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
