@@ -524,8 +524,10 @@ function bootstrap(): void {
 
   const refreshVehicles = async (): Promise<void> => {
     try {
-      const vehicles = await fetchVehicles();
+      const rawVehicles = await fetchVehicles();
       markDebugSourceUpdated("vehicles");
+      await tooltipMetadata.ensureTripsLoaded(rawVehicles);
+      const vehicles = tooltipMetadata.filterRenderableVehicles(rawVehicles);
       latestVehicles = vehicles;
       if (selectedVehicleId) {
         const selectedVehicle = getSelectedVehicle(vehicles);

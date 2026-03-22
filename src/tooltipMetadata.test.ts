@@ -44,6 +44,104 @@ function tripMetadata(destination: string | null, shapePolyline: string | null =
 }
 
 describe("tooltip metadata store", () => {
+  it("filters out vehicles with missing trip ids", () => {
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds: vi.fn().mockResolvedValue(new Map<string, TripMetadata>())
+    });
+
+    expect(
+      store.filterRenderableVehicles([
+        makeVehicle({ id: "v1", relatedTripId: null }),
+        makeVehicle({ id: "v2", relatedTripId: "   " })
+      ])
+    ).toEqual([]);
+  });
+
+  it("filters out vehicles with uncached trip ids until validation completes", async () => {
+    const deferredTrips = createDeferred<Map<string, TripMetadata>>();
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds: vi.fn().mockReturnValue(deferredTrips.promise)
+    });
+
+    const vehicle = makeVehicle({ relatedTripId: "trip-1" });
+    const pendingEnsure = store.ensureTripsLoaded([vehicle]);
+
+    expect(store.filterRenderableVehicles([vehicle])).toEqual([]);
+
+    deferredTrips.resolve(new Map([["trip-1", tripMetadata("Harvard")]]));
+    await pendingEnsure;
+  });
+
+  it("includes vehicles after their trips are validated", async () => {
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds: vi
+        .fn()
+        .mockResolvedValue(new Map([["trip-1", tripMetadata("Harvard")]]))
+    });
+
+    const vehicle = makeVehicle({ relatedTripId: "trip-1" });
+
+    await store.ensureTripsLoaded([vehicle]);
+
+    expect(store.filterRenderableVehicles([vehicle])).toEqual([vehicle]);
+  });
+
+  it("keeps vehicles excluded when their requested trips do not exist", async () => {
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds: vi.fn().mockResolvedValue(new Map<string, TripMetadata>())
+    });
+
+    const vehicle = makeVehicle({ relatedTripId: "trip-missing" });
+
+    await store.ensureTripsLoaded([vehicle]);
+
+    expect(store.filterRenderableVehicles([vehicle])).toEqual([]);
+  });
+
+  it("dedupes in-flight trip validation requests", async () => {
+    const deferredTrips = createDeferred<Map<string, TripMetadata>>();
+    const fetchTripsByIds = vi.fn().mockReturnValue(deferredTrips.promise);
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds
+    });
+
+    const vehicle = makeVehicle({ relatedTripId: "trip-1" });
+
+    const firstEnsure = store.ensureTripsLoaded([vehicle]);
+    const secondEnsure = store.ensureTripsLoaded([vehicle]);
+
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(1);
+    expect(fetchTripsByIds).toHaveBeenCalledWith(["trip-1"]);
+
+    deferredTrips.resolve(new Map([["trip-1", tripMetadata("Harvard")]]));
+    await firstEnsure;
+    await secondEnsure;
+  });
+
+  it("clears pending trip validation on failure so a later request can retry", async () => {
+    const fetchTripsByIds = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("rate limit"))
+      .mockResolvedValueOnce(new Map([["trip-1", tripMetadata("Harvard")]]));
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn().mockResolvedValue(new Map<string, string>()),
+      fetchTripsByIds
+    });
+
+    const vehicle = makeVehicle({ relatedTripId: "trip-1" });
+
+    await expect(store.ensureTripsLoaded([vehicle])).rejects.toThrow("rate limit");
+
+    await store.ensureTripsLoaded([vehicle]);
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(2);
+    expect(store.filterRenderableVehicles([vehicle])).toEqual([vehicle]);
+  });
+
   it("does not prefetch while content is visible", async () => {
     const fetchStopsByIds = vi.fn().mockResolvedValue(new Map<string, string>());
     const fetchTripsByIds = vi.fn().mockResolvedValue(new Map<string, TripMetadata>());

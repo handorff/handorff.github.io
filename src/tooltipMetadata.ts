@@ -61,6 +61,8 @@ function selectMissingTripIds(
 
 export interface TooltipMetadataStore {
   setHiddenModeEnabled: (enabled: boolean) => void;
+  ensureTripsLoaded: (vehicles: Vehicle[]) => Promise<void>;
+  filterRenderableVehicles: (vehicles: Vehicle[]) => Vehicle[];
   prefetchFromVehicles: (vehicles: Vehicle[]) => Promise<void>;
   getStopText: (vehicle: Pick<Vehicle, "relatedStopId">) => string;
   getDestinationText: (vehicle: Pick<Vehicle, "relatedTripId" | "destination">) => string;
@@ -72,6 +74,7 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
   const tripCache = new Map<string, TripMetadata | null>();
   const pendingStopIds = new Set<string>();
   const pendingTripIds = new Set<string>();
+  const tripRequestsById = new Map<string, Promise<void>>();
 
   let hiddenModeEnabled = false;
   let hiddenModeGeneration = 0;
@@ -90,6 +93,82 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
       hiddenModeGeneration += 1;
     }
   };
+
+  const loadTripsByIds = async (tripIds: string[]): Promise<void> => {
+    const normalizedTripIds = Array.from(
+      new Set(
+        tripIds
+          .map((tripId) => normalizeId(tripId))
+          .filter((tripId): tripId is string => tripId !== null)
+      )
+    );
+
+    if (normalizedTripIds.length === 0) {
+      return;
+    }
+
+    const pendingRequests = new Set<Promise<void>>();
+    const tripIdsToFetch: string[] = [];
+
+    for (const tripId of normalizedTripIds) {
+      if (tripCache.has(tripId)) {
+        continue;
+      }
+
+      const existingRequest = tripRequestsById.get(tripId);
+      if (existingRequest) {
+        pendingRequests.add(existingRequest);
+        continue;
+      }
+
+      tripIdsToFetch.push(tripId);
+    }
+
+    if (tripIdsToFetch.length > 0) {
+      for (const tripId of tripIdsToFetch) {
+        pendingTripIds.add(tripId);
+      }
+
+      const tripRequest = (async (): Promise<void> => {
+        try {
+          const metadataByTripId = await options.fetchTripsByIds(tripIdsToFetch);
+          for (const tripId of tripIdsToFetch) {
+            tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
+          }
+        } finally {
+          for (const tripId of tripIdsToFetch) {
+            pendingTripIds.delete(tripId);
+            tripRequestsById.delete(tripId);
+          }
+        }
+      })();
+
+      for (const tripId of tripIdsToFetch) {
+        tripRequestsById.set(tripId, tripRequest);
+      }
+      pendingRequests.add(tripRequest);
+    }
+
+    await Promise.all(pendingRequests);
+  };
+
+  const ensureTripsLoaded = async (vehicles: Vehicle[]): Promise<void> => {
+    const tripIds = vehicles
+      .map((vehicle) => vehicle.relatedTripId)
+      .filter((tripId): tripId is string => typeof tripId === "string");
+
+    await loadTripsByIds(tripIds);
+  };
+
+  const filterRenderableVehicles = (vehicles: Vehicle[]): Vehicle[] =>
+    vehicles.filter((vehicle) => {
+      const tripId = normalizeId(vehicle.relatedTripId);
+      if (!tripId) {
+        return false;
+      }
+
+      return tripCache.has(tripId) && tripCache.get(tripId) !== null;
+    });
 
   const prefetchFromVehicles = async (vehicles: Vehicle[]): Promise<void> => {
     if (!hiddenModeEnabled) {
@@ -112,13 +191,13 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
     const generationAtRequestStart = hiddenModeGeneration;
 
     try {
-      const [namesByStopId, metadataByTripId] = await Promise.all([
+      const [namesByStopId] = await Promise.all([
         missingStopIds.length > 0
           ? options.fetchStopsByIds(missingStopIds)
           : Promise.resolve(new Map<string, string>()),
         missingTripIds.length > 0
-          ? options.fetchTripsByIds(missingTripIds)
-          : Promise.resolve(new Map<string, TripMetadata>())
+          ? loadTripsByIds(missingTripIds)
+          : Promise.resolve()
       ]);
 
       if (!hiddenModeEnabled || generationAtRequestStart !== hiddenModeGeneration) {
@@ -129,17 +208,10 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
         stopCache.set(stopId, namesByStopId.get(stopId) ?? null);
       }
 
-      for (const tripId of missingTripIds) {
-        tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
-      }
-
       notifyDataChanged();
     } finally {
       for (const stopId of missingStopIds) {
         pendingStopIds.delete(stopId);
-      }
-      for (const tripId of missingTripIds) {
-        pendingTripIds.delete(tripId);
       }
     }
   };
@@ -200,6 +272,8 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
 
   return {
     setHiddenModeEnabled,
+    ensureTripsLoaded,
+    filterRenderableVehicles,
     prefetchFromVehicles,
     getStopText,
     getDestinationText,
