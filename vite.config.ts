@@ -18,7 +18,7 @@ export default defineConfig({
   base: resolveBasePath(),
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"]
+    include: ["src/**/*.test.ts", "worker/**/*.test.js"]
   }
 });
 

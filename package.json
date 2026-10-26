@@ -10,6 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "worker:deploy": "wrangler deploy --config worker/wrangler.jsonc",
+    "worker:check": "wrangler deploy --config worker/wrangler.jsonc --dry-run --outdir dist/worker",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -17,6 +19,7 @@
     "@types/node": "24.19.2",
     "typescript": "7.0.2",
     "vite": "8.3.5",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "wrangler": "4.153.0"
   }
 }

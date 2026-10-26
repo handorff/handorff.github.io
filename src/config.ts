@@ -1,6 +1,7 @@
 import type { GridConfig } from "./types";
 
-export const MBTA_API_BASE_URL = "https://api-v3.mbta.com";
+export const MBTA_API_BASE_URL =
+  import.meta.env.VITE_MBTA_API_BASE_URL || "https://mbta-proxy.handorff-paul.workers.dev";
 export const MBTA_VEHICLES_ENDPOINT =
   "/vehicles?page[limit]=1000&fields[vehicle]=latitude,longitude,current_status,destination,route,stop,trip&include=route,stop,trip&fields[route]=color,sort_order,short_name,long_name&fields[stop]=name&fields[trip]=headsign";
 export const MBTA_ROUTES_ENDPOINT = "/routes?page[limit]=1000&fields[route]=color,sort_order,short_name,long_name";
