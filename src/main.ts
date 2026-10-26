@@ -95,6 +95,7 @@ function bootstrap(): void {
   const canvas = requireCanvas("#grid-canvas");
   const contentOverlay = requireHtmlElement("#content-overlay");
   const content = requireHtmlElement("#site-content");
+  const header = requireHtmlElement("#site-header");
   const contentVisibilityToggle = requireInput("#toggle-content-visibility");
   const darkModeToggle = requireInput("#toggle-dark-mode");
   const hoverOutline = requireHtmlElement("#grid-hover-outline");
@@ -162,21 +163,30 @@ function bootstrap(): void {
   let latestVehicles: Vehicle[] = [];
   let isContentVisible = true;
   const updateContentMask = (): void => {
-    const rects = [];
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode()) {
-      if (!walker.currentNode.textContent?.trim()) continue;
-      const range = document.createRange();
-      range.selectNodeContents(walker.currentNode);
-      for (const rect of range.getClientRects()) {
-        rects.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+    const measureText = (element: HTMLElement) => {
+      const rects = [];
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        if (!walker.currentNode.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(walker.currentNode);
+        for (const rect of range.getClientRects()) {
+          rects.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+        }
       }
+      return rects;
+    };
+    const headerRects = measureText(header);
+    for (const input of header.querySelectorAll("input")) {
+      const rect = input.getBoundingClientRect();
+      headerRects.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
     }
-    renderer.setContentRects(rects);
+    renderer.setContentRects(measureText(content), headerRects);
     renderer.setContentMaskVisible(isContentVisible);
   };
   const contentObserver = new ResizeObserver(updateContentMask);
   contentObserver.observe(content);
+  contentObserver.observe(header);
   contentOverlay.addEventListener("scroll", updateContentMask, { passive: true });
   void document.fonts.ready.then(updateContentMask);
   let selectedVehicleId: string | null = null;
@@ -593,6 +603,10 @@ function bootstrap(): void {
 
     renderer.setState(computeBuffer(latestVehicles));
   };
+
+  header.querySelectorAll<HTMLAnchorElement>("nav a").forEach((link) => {
+    link.addEventListener("click", () => setContentVisibility(true));
+  });
 
   const onVisibilityChange = (): void => {
     pollingLoop.setPaused(document.hidden);

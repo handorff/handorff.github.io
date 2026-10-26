@@ -107,6 +107,22 @@ describe("GridRenderer grid line color", () => {
 });
 
 describe("GridRenderer content mask", () => {
+  it("keeps the header mask when page content is hidden", () => {
+    const { renderer, context } = createRendererWithContext();
+    context.save = vi.fn();
+    context.restore = vi.fn();
+    context.fillRect = vi.fn();
+    renderer.resize(40, 40);
+    renderer.setContentRects([], [{ left: 10, top: 10, width: 5, height: 5 }]);
+    renderer.setContentMaskVisible(false);
+    for (let i = 0; i < 60; i += 1) {
+      (renderer as unknown as { drawFrame: (buffer: Float32Array) => void })
+        .drawFrame(new Float32Array(16));
+    }
+    expect(context.fillRect).toHaveBeenLastCalledWith(20, 20, 10, 10);
+    expect(context.fillStyle).toMatch(/^rgba\(0, 0, 0, 0\.[1-9]/);
+  });
+
   it("fades cells near text, leaves distant cells intact, and restores them when content is hidden", () => {
     const { renderer, context } = createRendererWithContext();
     context.save = vi.fn();

@@ -79,7 +79,7 @@ export class GridRenderer {
   private viewportHeightPx = 0;
   private transitionStartMs = 0;
   private rafId: number | null = null;
-  private contentMask: { left: number; top: number; opacity: number }[] = [];
+  private contentMask: { left: number; top: number; opacity: number; persistentOpacity: number }[] = [];
   private contentMaskVisible = true;
   private contentMaskStrength = 1;
 
@@ -153,7 +153,7 @@ export class GridRenderer {
     this.contentMaskVisible = visible;
   }
 
-  public setContentRects(rects: CellRect[]): void {
+  public setContentRects(rects: CellRect[], persistentRects: CellRect[] = []): void {
     const metrics = this.getGridMetrics();
     this.contentMask = [];
     // Cache a cell-aligned fade around actual text lines, rather than the content box.
@@ -164,16 +164,23 @@ export class GridRenderer {
         const top = metrics.offsetY + row * metrics.pitch;
         const x = left + metrics.pitch / 2;
         const y = top + metrics.pitch / 2;
-        let opacity = 0;
-        for (const rect of rects) {
-          const dx = Math.max(rect.left - x, 0, x - rect.left - rect.width);
-          const dy = Math.max(rect.top - y, 0, y - rect.top - rect.height);
-          const distance = Math.hypot(dx, dy);
-          const t = clamp01((distance - metrics.pitch / 2) / featherPx);
-          const fade = 1 - t * t * (3 - 2 * t);
-          opacity = Math.max(opacity, fade * 0.94);
+        const opacityNear = (textRects: CellRect[]): number => {
+          let opacity = 0;
+          for (const rect of textRects) {
+            const dx = Math.max(rect.left - x, 0, x - rect.left - rect.width);
+            const dy = Math.max(rect.top - y, 0, y - rect.top - rect.height);
+            const distance = Math.hypot(dx, dy);
+            const t = clamp01((distance - metrics.pitch / 2) / featherPx);
+            const fade = 1 - t * t * (3 - 2 * t);
+            opacity = Math.max(opacity, fade * 0.94);
+          }
+          return opacity;
+        };
+        const opacity = opacityNear(rects);
+        const persistentOpacity = opacityNear(persistentRects);
+        if (Math.max(opacity, persistentOpacity) > 0.001) {
+          this.contentMask.push({ left, top, opacity, persistentOpacity });
         }
-        if (opacity > 0.001) this.contentMask.push({ left, top, opacity });
       }
     }
   }
@@ -249,11 +256,12 @@ export class GridRenderer {
     }
 
     this.contentMaskStrength += ((this.contentMaskVisible ? 1 : 0) - this.contentMaskStrength) * 0.18;
-    if (this.contentMaskStrength > 0.001 && this.contentMask.length > 0) {
+    if (this.contentMask.length > 0) {
       this.ctx.save();
       this.ctx.globalCompositeOperation = "destination-out";
       for (const cell of this.contentMask) {
-        this.ctx.fillStyle = `rgba(0, 0, 0, ${cell.opacity * this.contentMaskStrength})`;
+        if (Math.max(cell.opacity * this.contentMaskStrength, cell.persistentOpacity) <= 0.001) continue;
+        this.ctx.fillStyle = `rgba(0, 0, 0, ${Math.max(cell.opacity * this.contentMaskStrength, cell.persistentOpacity)})`;
         this.ctx.fillRect(cell.left, cell.top, metrics.pitch, metrics.pitch);
       }
       this.ctx.restore();
