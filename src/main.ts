@@ -526,7 +526,14 @@ function bootstrap(): void {
     try {
       const rawVehicles = await fetchVehicles();
       markDebugSourceUpdated("vehicles");
-      await tooltipMetadata.ensureTripsLoaded(rawVehicles);
+      try {
+        await tooltipMetadata.ensureTripsLoaded(rawVehicles);
+      } catch (error) {
+        if (tooltipMetadata.filterRenderableVehicles(rawVehicles).length === 0) {
+          throw error;
+        }
+        console.error("Unable to load some MBTA trips. Rendering validated vehicles.", error);
+      }
       const vehicles = tooltipMetadata.filterRenderableVehicles(rawVehicles);
       latestVehicles = vehicles;
       if (selectedVehicleId) {

@@ -5,6 +5,9 @@ export const UNKNOWN_STOP_TEXT = "Unknown stop";
 export const LOADING_DESTINATION_TEXT = "Loading destination...";
 export const UNKNOWN_DESTINATION_TEXT = "Unknown destination";
 
+// Keep trip filter URLs short and issue batches sequentially to avoid request bursts.
+const TRIP_BATCH_SIZE = 50;
+
 interface TooltipMetadataStoreOptions {
   fetchStopsByIds: (stopIds: string[]) => Promise<Map<string, string>>;
   fetchTripsByIds: (tripIds: string[]) => Promise<Map<string, TripMetadata>>;
@@ -131,9 +134,21 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
 
       const tripRequest = (async (): Promise<void> => {
         try {
-          const metadataByTripId = await options.fetchTripsByIds(tripIdsToFetch);
-          for (const tripId of tripIdsToFetch) {
-            tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
+          const errors: unknown[] = [];
+          for (let offset = 0; offset < tripIdsToFetch.length; offset += TRIP_BATCH_SIZE) {
+            const batch = tripIdsToFetch.slice(offset, offset + TRIP_BATCH_SIZE);
+            try {
+              const metadataByTripId = await options.fetchTripsByIds(batch);
+              for (const tripId of batch) {
+                tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
+              }
+            } catch (error) {
+              // Leave failed IDs uncached so the next poll can retry them.
+              errors.push(error);
+            }
+          }
+          if (errors.length > 0) {
+            throw new AggregateError(errors, "Unable to load some trip metadata batches.");
           }
         } finally {
           for (const tripId of tripIdsToFetch) {

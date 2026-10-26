@@ -135,11 +135,79 @@ describe("tooltip metadata store", () => {
 
     const vehicle = makeVehicle({ relatedTripId: "trip-1" });
 
-    await expect(store.ensureTripsLoaded([vehicle])).rejects.toThrow("rate limit");
+    await expect(store.ensureTripsLoaded([vehicle])).rejects.toThrow("Unable to load some trip metadata batches");
 
     await store.ensureTripsLoaded([vehicle]);
     expect(fetchTripsByIds).toHaveBeenCalledTimes(2);
     expect(store.filterRenderableVehicles([vehicle])).toEqual([vehicle]);
+  });
+
+  it("validates a full fleet in short, sequential batches and merges the results", async () => {
+    const vehicles = Array.from({ length: 798 }, (_, index) =>
+      makeVehicle({ id: `vehicle-${index}`, relatedTripId: `trip-${index}` })
+    );
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+    const fetchTripsByIds = vi.fn(async (tripIds: string[]) => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+      await Promise.resolve();
+      activeRequests -= 1;
+      return new Map(tripIds.map((id) => [id, tripMetadata(id, `shape-${id}`)]));
+    });
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn(),
+      fetchTripsByIds
+    });
+
+    await store.ensureTripsLoaded([...vehicles, vehicles[0]]);
+
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(16);
+    expect(fetchTripsByIds.mock.calls.every(([ids]) => ids.length <= 50)).toBe(true);
+    expect(fetchTripsByIds.mock.calls.flatMap(([ids]) => ids)).toEqual(
+      vehicles.map((vehicle) => vehicle.relatedTripId)
+    );
+    expect(maxActiveRequests).toBe(1);
+    expect(store.filterRenderableVehicles(vehicles)).toEqual(vehicles);
+    expect(store.getShapePolyline(vehicles[797])).toBe("shape-trip-797");
+  });
+
+  it("retains successful batches, continues after failures, and retries only failed IDs", async () => {
+    const vehicles = Array.from({ length: 151 }, (_, index) =>
+      makeVehicle({ id: `vehicle-${index}`, relatedTripId: `trip-${index}` })
+    );
+    let failBatch = true;
+    const fetchTripsByIds = vi.fn(async (tripIds: string[]) => {
+      if (failBatch && tripIds.includes("trip-50")) {
+        throw new Error("rate limit");
+      }
+      // A missing trip in a successful response is invalid, rather than retryable.
+      return new Map(
+        tripIds.filter((id) => id !== "trip-0").map((id) => [id, tripMetadata(id)])
+      );
+    });
+    const store = createTooltipMetadataStore({
+      fetchStopsByIds: vi.fn(),
+      fetchTripsByIds
+    });
+
+    await expect(store.ensureTripsLoaded(vehicles)).rejects.toThrow(
+      "Unable to load some trip metadata batches"
+    );
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(4);
+    expect(store.filterRenderableVehicles(vehicles)).toEqual([
+      ...vehicles.slice(1, 50),
+      ...vehicles.slice(100)
+    ]);
+
+    failBatch = false;
+    await store.ensureTripsLoaded(vehicles);
+
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(5);
+    expect(fetchTripsByIds.mock.calls[4][0]).toEqual(
+      vehicles.slice(50, 100).map((vehicle) => vehicle.relatedTripId)
+    );
+    expect(store.filterRenderableVehicles(vehicles)).toEqual(vehicles.slice(1));
   });
 
   it("does not prefetch while content is visible", async () => {
