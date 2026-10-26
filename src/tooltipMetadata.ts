@@ -63,6 +63,8 @@ function selectMissingTripIds(
 }
 
 export interface TooltipMetadataStore {
+  seed: (stops: ReadonlyMap<string, string>, trips: ReadonlyMap<string, TripMetadata>) => void;
+  ensureShapeLoaded: (vehicle: Vehicle) => Promise<void>;
   setHiddenModeEnabled: (enabled: boolean) => void;
   ensureTripsLoaded: (vehicles: Vehicle[]) => Promise<void>;
   filterRenderableVehicles: (vehicles: Vehicle[]) => Vehicle[];
@@ -78,6 +80,33 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
   const pendingStopIds = new Set<string>();
   const pendingTripIds = new Set<string>();
   const tripRequestsById = new Map<string, Promise<void>>();
+
+  const detailedTripIds = new Set<string>();
+  const shapeRequests = new Map<string, Promise<void>>();
+  const seed = (stops: ReadonlyMap<string, string>, trips: ReadonlyMap<string, TripMetadata>): void => {
+    for (const [id, name] of stops) stopCache.set(id, name);
+    for (const [id, metadata] of trips) {
+      tripCache.set(id, { ...metadata, shapePolyline: tripCache.get(id)?.shapePolyline ?? null });
+    }
+  };
+  const ensureShapeLoaded = async (vehicle: Vehicle): Promise<void> => {
+    const id = normalizeId(vehicle.relatedTripId);
+    if (!id || detailedTripIds.has(id)) return;
+    const pending = shapeRequests.get(id);
+    if (pending) return pending;
+    const request = (async () => {
+      try {
+        const metadata = await options.fetchTripsByIds([id]);
+        tripCache.set(id, metadata.get(id) ?? null);
+        detailedTripIds.add(id);
+        notifyDataChanged();
+      } finally {
+        shapeRequests.delete(id);
+      }
+    })();
+    shapeRequests.set(id, request);
+    return request;
+  };
 
   let hiddenModeEnabled = false;
   let hiddenModeGeneration = 0;
@@ -141,6 +170,7 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
               const metadataByTripId = await options.fetchTripsByIds(batch);
               for (const tripId of batch) {
                 tripCache.set(tripId, metadataByTripId.get(tripId) ?? null);
+                detailedTripIds.add(tripId);
               }
             } catch (error) {
               // Leave failed IDs uncached so the next poll can retry them.
@@ -286,6 +316,8 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
   };
 
   return {
+    seed,
+    ensureShapeLoaded,
     setHiddenModeEnabled,
     ensureTripsLoaded,
     filterRenderableVehicles,

@@ -1,7 +1,8 @@
 :root {
   color-scheme: only light;
   --page-bg: #f3f5f7;
-  --overlay-bg: rgba(255, 255, 255, 0.72);
+  --text-color: #18222c;
+  --link-color: #244d67;
   --grid-line-color-light: rgba(130, 138, 145, 0.16);
   --grid-line-color-dark: rgba(130, 138, 145, 0.28);
 }
@@ -17,18 +18,20 @@ body {
 
 body[data-theme="light"] {
   --page-bg: #f3f5f7;
-  --overlay-bg: rgba(255, 255, 255, 0.72);
+  --text-color: #18222c;
+  --link-color: #244d67;
 }
 
 body[data-theme="dark"] {
   --page-bg: #22282d;
-  --overlay-bg: rgba(34, 40, 45, 0.58);
+  --text-color: #edf0f2;
+  --link-color: #b8d5e8;
 }
 
 body {
   position: relative;
   font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
-  color: #111827;
+  color: var(--text-color);
   transition: background-color 180ms ease;
 }
 
@@ -46,18 +49,12 @@ body {
   inset: 0;
   z-index: 1;
   box-sizing: border-box;
-  padding: 1.2rem clamp(1rem, 3.2vw, 2.4rem) 2rem;
+  padding: 1.2rem clamp(1.5rem, 5vw, 5rem) 3rem;
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  background-color: var(--overlay-bg);
   pointer-events: none;
   overflow: auto;
-  transition: background-color 220ms ease;
-}
-
-#content-overlay[data-content-visible="false"] {
-  background-color: transparent;
 }
 
 #grid-hover-outline {
@@ -238,9 +235,9 @@ body {
   align-items: center;
   gap: 0.5rem;
   padding: 0.42rem 0.64rem;
-  border-radius: 999px;
-  border: 1px solid rgba(17, 24, 39, 0.16);
-  background: rgba(255, 255, 255, 0.92);
+  border: 0;
+  background: transparent;
+  color: var(--text-color);
   font-size: 0.88rem;
   line-height: 1.2;
   font-weight: 600;
@@ -248,7 +245,7 @@ body {
 
 .toggle-control input {
   margin: 0;
-  accent-color: #111827;
+  accent-color: var(--text-color);
 }
 
 body[data-theme="dark"] #vehicle-tooltip,
@@ -273,23 +270,15 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
   pointer-events: auto;
   width: min(760px, 100%);
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(17, 24, 39, 0.1);
-  border-radius: 16px;
-  padding: clamp(1.1rem, 2.2vw, 1.7rem);
-  box-shadow: 0 14px 34px rgba(17, 24, 39, 0.08);
+  margin-top: clamp(2rem, 9vh, 6rem);
+  padding: 0;
+  font-size: 1.05rem;
   opacity: 1;
-  transform: translateY(0) scale(1);
-  transform-origin: top center;
-  transition:
-    opacity 220ms ease,
-    transform 220ms ease;
-  will-change: opacity, transform;
+  transition: opacity 220ms ease;
 }
 
 #content-overlay[data-content-visible="false"] #site-content {
   opacity: 0;
-  transform: translateY(1rem) scale(0.985);
   pointer-events: none;
 }
 
@@ -307,7 +296,7 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
 
 #site-content p {
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.7;
 }
 
 .eyebrow {
@@ -320,7 +309,7 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
 }
 
 .site-section + .site-section {
-  margin-top: 1.25rem;
+  margin-top: 2rem;
 }
 
 #site-content ul {
@@ -356,5 +345,36 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
   #debug-footer {
     min-width: min(260px, calc(100vw - 1rem));
     padding: 0.64rem 0.72rem;
+  }
+}
+
+#site-content a {
+  color: var(--link-color);
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+#site-content a:hover {
+  text-decoration-color: currentColor;
+}
+
+#site-content a:focus-visible,
+.toggle-control:focus-within {
+  outline: 2px solid var(--link-color);
+  outline-offset: 4px;
+}
+
+#site-content p + p {
+  margin-top: 0.65rem;
+}
+
+#site-content li {
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #site-content {
+    transition: none;
   }
 }

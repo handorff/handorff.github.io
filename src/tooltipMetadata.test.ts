@@ -379,3 +379,38 @@ describe("tooltip metadata store", () => {
     expect(store.getStopText(vehicle)).toBe(LOADING_STOP_TEXT);
   });
 });
+
+
+describe("included metadata and lazy shapes", () => {
+  it("renders from included data without extra requests, then loads only the selected shape once", async () => {
+    const fetchStopsByIds = vi.fn();
+    const fetchTripsByIds = vi.fn().mockResolvedValue(new Map([["t1", tripMetadata("Harvard", "polyline")]]));
+    const store = createTooltipMetadataStore({ fetchStopsByIds, fetchTripsByIds });
+    const vehicle = makeVehicle({ relatedTripId: "t1", relatedStopId: "s1" });
+    const trips = new Map([["t1", tripMetadata("Harvard")]]);
+    store.seed(new Map([["s1", "Central"]]), trips);
+    expect(store.filterRenderableVehicles([vehicle, makeVehicle({ relatedTripId: "invalid" })])).toEqual([vehicle]);
+    store.setHiddenModeEnabled(true);
+    await store.prefetchFromVehicles([vehicle]);
+    expect(fetchStopsByIds).not.toHaveBeenCalled();
+    expect(fetchTripsByIds).not.toHaveBeenCalled();
+    expect(store.getStopText(vehicle)).toBe("Central");
+    expect(store.getDestinationText(vehicle)).toBe("Harvard");
+    await Promise.all([store.ensureShapeLoaded(vehicle), store.ensureShapeLoaded(vehicle)]);
+    expect(fetchTripsByIds).toHaveBeenCalledExactlyOnceWith(["t1"]);
+    store.seed(new Map(), trips);
+    expect(store.getShapePolyline(vehicle)).toBe("polyline");
+    await store.ensureShapeLoaded(vehicle);
+    expect(fetchTripsByIds).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed selected shape request", async () => {
+    const fetchTripsByIds = vi.fn().mockRejectedValueOnce(new Error("429"))
+      .mockResolvedValue(new Map([["t1", tripMetadata("Harvard", "polyline")]]));
+    const store = createTooltipMetadataStore({ fetchStopsByIds: vi.fn(), fetchTripsByIds });
+    const vehicle = makeVehicle({ relatedTripId: "t1" });
+    await expect(store.ensureShapeLoaded(vehicle)).rejects.toThrow("429");
+    await store.ensureShapeLoaded(vehicle);
+    expect(store.getShapePolyline(vehicle)).toBe("polyline");
+  });
+});

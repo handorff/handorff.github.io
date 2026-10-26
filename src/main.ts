@@ -17,7 +17,7 @@ import {
   calculateGridDimensions,
   latLonToCell
 } from "./grid";
-import { fetchRoutes, fetchStopsByIds, fetchTripsByIds, fetchVehicles } from "./mbtaApi";
+import { fetchStopsByIds, fetchTripsByIds, fetchVehicleSnapshot } from "./mbtaApi";
 import { createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
 import { rasterizeShapeToCellIndices } from "./shapeGrid";
@@ -72,10 +72,6 @@ function requireHtmlElement(selector: string): HTMLElement {
     throw new Error(`Missing required HTML element: ${selector}`);
   }
   return element;
-}
-
-function createRouteMap(routes: RouteMeta[]): Map<string, RouteMeta> {
-  return new Map(routes.map((route) => [route.id, route]));
 }
 
 function sameDims(
@@ -162,9 +158,27 @@ function bootstrap(): void {
   };
 
   let renderer = createRenderer();
-  let routesById = new Map<string, RouteMeta>();
+  const routesById = new Map<string, RouteMeta>();
   let latestVehicles: Vehicle[] = [];
   let isContentVisible = true;
+  const updateContentMask = (): void => {
+    const rects = [];
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent?.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      for (const rect of range.getClientRects()) {
+        rects.push({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+      }
+    }
+    renderer.setContentRects(rects);
+    renderer.setContentMaskVisible(isContentVisible);
+  };
+  const contentObserver = new ResizeObserver(updateContentMask);
+  contentObserver.observe(content);
+  contentOverlay.addEventListener("scroll", updateContentMask, { passive: true });
+  void document.fonts.ready.then(updateContentMask);
   let selectedVehicleId: string | null = null;
   const shapeCellCache = new Map<string, { polyline: string; cellIndices: Set<number> }>();
   const debugSourceUpdatedAt = createEmptyDebugSourceMap();
@@ -440,7 +454,10 @@ function bootstrap(): void {
       return;
     }
 
-    void tooltipMetadata.prefetchFromVehicles([vehicle]).catch((error) => {
+    void Promise.all([
+      tooltipMetadata.prefetchFromVehicles([vehicle]),
+      tooltipMetadata.ensureShapeLoaded(vehicle)
+    ]).catch((error) => {
       console.error("Unable to prefetch tooltip metadata.", error);
     });
   };
@@ -524,17 +541,15 @@ function bootstrap(): void {
 
   const refreshVehicles = async (): Promise<void> => {
     try {
-      const rawVehicles = await fetchVehicles();
+      const snapshot = await fetchVehicleSnapshot();
       markDebugSourceUpdated("vehicles");
-      try {
-        await tooltipMetadata.ensureTripsLoaded(rawVehicles);
-      } catch (error) {
-        if (tooltipMetadata.filterRenderableVehicles(rawVehicles).length === 0) {
-          throw error;
-        }
-        console.error("Unable to load some MBTA trips. Rendering validated vehicles.", error);
-      }
-      const vehicles = tooltipMetadata.filterRenderableVehicles(rawVehicles);
+      for (const route of snapshot.routes) routesById.set(route.id, route);
+      tooltipMetadata.seed(snapshot.stops, snapshot.trips);
+      if (snapshot.routes.length > 0) markDebugSourceUpdated("routes");
+      if (snapshot.stops.size > 0) markDebugSourceUpdated("stops");
+      if (snapshot.trips.size > 0) markDebugSourceUpdated("trips");
+      // Only trips actually included by the API are valid for rendering.
+      const vehicles = tooltipMetadata.filterRenderableVehicles(snapshot.vehicles);
       latestVehicles = vehicles;
       if (selectedVehicleId) {
         const selectedVehicle = getSelectedVehicle(vehicles);
@@ -546,15 +561,10 @@ function bootstrap(): void {
       const nextBuffer = computeBuffer(vehicles);
       renderer.setState(nextBuffer);
 
-      if (!isContentVisible) {
-        void tooltipMetadata.prefetchFromVehicles(vehicles).catch((error) => {
-          console.error("Unable to prefetch tooltip metadata.", error);
-        });
-      }
-
       if (!isContentVisible && selectedVehicleId) {
         updateSelectionVisualization?.();
         renderTooltipForSelection?.();
+        prefetchSelectedVehicleMetadata(getSelectedVehicle());
       }
     } catch (error) {
       console.error("Unable to refresh MBTA vehicles. Keeping current frame.", error);
@@ -573,6 +583,7 @@ function bootstrap(): void {
     contentVisibilityToggle.checked = visible;
     tooltipMetadata.setHiddenModeEnabled(!isContentVisible);
     setContentLayerVisible(content, contentOverlay, isContentVisible);
+    renderer.setContentMaskVisible(isContentVisible);
 
     if (isContentVisible) {
       clearSelection();
@@ -581,9 +592,6 @@ function bootstrap(): void {
     }
 
     renderer.setState(computeBuffer(latestVehicles));
-    void tooltipMetadata.prefetchFromVehicles(latestVehicles).catch((error) => {
-      console.error("Unable to prefetch tooltip metadata.", error);
-    });
   };
 
   const onVisibilityChange = (): void => {
@@ -708,18 +716,8 @@ function bootstrap(): void {
     renderTooltipForSelection?.();
   });
 
-  void (async () => {
-    try {
-      const routes = await fetchRoutes();
-      markDebugSourceUpdated("routes");
-      routesById = createRouteMap(routes);
-    } catch (error) {
-      console.error("Unable to fetch MBTA routes. Using fallback color.", error);
-    }
-
-    onVisibilityChange();
-    pollingLoop.start();
-  })();
+  onVisibilityChange();
+  pollingLoop.start();
 
   window.addEventListener("resize", () => {
     const nextRenderDims = calculateRenderGridDimensions(
@@ -734,6 +732,7 @@ function bootstrap(): void {
       shapeCellCache.clear();
       renderer.stop();
       renderer = createRenderer();
+      updateContentMask();
       renderer.setState(computeBuffer(latestVehicles));
       hideHoverOutline();
       updateSelectionVisualization?.();
@@ -742,6 +741,7 @@ function bootstrap(): void {
     }
 
     renderer.resize(window.innerWidth, window.innerHeight);
+    updateContentMask();
     hideHoverOutline();
     updateSelectionVisualization?.();
 
@@ -752,6 +752,7 @@ function bootstrap(): void {
   document.addEventListener("visibilitychange", onVisibilityChange);
   window.addEventListener("pagehide", () => {
     pollingLoop.stop();
+    contentObserver.disconnect();
     renderer.stop();
   });
 }

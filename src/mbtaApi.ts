@@ -6,9 +6,12 @@ import {
   MBTA_VEHICLES_ENDPOINT
 } from "./config";
 import type { RouteMeta, TripMetadata, Vehicle, VehicleCurrentStatus } from "./types";
+import { createMbtaFetch } from "./requestScheduler";
 
 const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
+
+const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init));
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -54,7 +57,8 @@ async function fetchJsonDocument<T extends JsonApiResource>(
 
 export async function fetchPaginated<T extends JsonApiResource>(
   initialUrl: string,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = scheduledFetch,
+  onIncluded?: (resources: JsonApiResource[]) => void
 ): Promise<T[]> {
   const resources: T[] = [];
   const seenUrls = new Set<string>();
@@ -68,6 +72,7 @@ export async function fetchPaginated<T extends JsonApiResource>(
 
     const pageDocument: JsonApiDocument<T> = await fetchJsonDocument<T>(currentUrl, fetchImpl);
     resources.push(...pageDocument.data);
+    onIncluded?.(pageDocument.included ?? []);
 
     const nextUrl: string | null | undefined = pageDocument.links?.next;
     currentUrl = typeof nextUrl === "string" && nextUrl.length > 0 ? resolveNextUrl(currentUrl, nextUrl) : null;
@@ -197,13 +202,31 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function fetchVehicles(
+export interface VehicleSnapshot {
+  vehicles: Vehicle[];
+  routes: RouteMeta[];
+  stops: Map<string, string>;
+  trips: Map<string, TripMetadata>;
+}
+
+function parseRoute(resource: JsonApiResource): RouteMeta {
+  return {
+    id: resource.id,
+    colorHex: normalizeColorHex(resource.attributes?.["color"]),
+    sortOrder: normalizeSortOrder(resource.attributes?.["sort_order"]),
+    shortName: normalizeOptionalString(resource.attributes?.["short_name"]),
+    longName: normalizeOptionalString(resource.attributes?.["long_name"])
+  };
+}
+
+export async function fetchVehicleSnapshot(
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_VEHICLES_ENDPOINT,
-  fetchImpl: FetchLike = fetch
-): Promise<Vehicle[]> {
+  fetchImpl: FetchLike = scheduledFetch
+): Promise<VehicleSnapshot> {
   const url = buildUrl(baseUrl, endpoint);
-  const resources = await fetchPaginated<JsonApiResource>(url, fetchImpl);
+  const included: JsonApiResource[] = [];
+  const resources = await fetchPaginated<JsonApiResource>(url, fetchImpl, (items) => included.push(...items));
 
   const vehicles: Vehicle[] = [];
   for (const resource of resources) {
@@ -225,24 +248,42 @@ export async function fetchVehicles(
     });
   }
 
-  return vehicles;
+  const routes: RouteMeta[] = [];
+  const stops = new Map<string, string>();
+  const trips = new Map<string, TripMetadata>();
+  for (const resource of included) {
+    if (resource.type === "route") routes.push(parseRoute(resource));
+    if (resource.type === "stop") {
+      const name = normalizeOptionalString(resource.attributes?.["name"]);
+      if (name) stops.set(resource.id, name);
+    }
+    if (resource.type === "trip") {
+      trips.set(resource.id, {
+        destination: normalizeOptionalString(resource.attributes?.["headsign"]),
+        shapePolyline: null
+      });
+    }
+  }
+  return { vehicles, routes, stops, trips };
+}
+
+export async function fetchVehicles(
+  baseUrl: string = MBTA_API_BASE_URL,
+  endpoint: string = MBTA_VEHICLES_ENDPOINT,
+  fetchImpl: FetchLike = scheduledFetch
+): Promise<Vehicle[]> {
+  return (await fetchVehicleSnapshot(baseUrl, endpoint, fetchImpl)).vehicles;
 }
 
 export async function fetchRoutes(
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_ROUTES_ENDPOINT,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = scheduledFetch
 ): Promise<RouteMeta[]> {
   const url = buildUrl(baseUrl, endpoint);
   const resources = await fetchPaginated<JsonApiResource>(url, fetchImpl);
 
-  return resources.map((resource) => ({
-    id: resource.id,
-    colorHex: normalizeColorHex(resource.attributes?.["color"]),
-    sortOrder: normalizeSortOrder(resource.attributes?.["sort_order"]),
-    shortName: normalizeOptionalString(resource.attributes?.["short_name"]),
-    longName: normalizeOptionalString(resource.attributes?.["long_name"])
-  }));
+  return resources.map(parseRoute);
 }
 
 function buildStopsByIdsUrl(baseUrl: string, endpoint: string, stopIds: string[]): string {
@@ -267,7 +308,7 @@ export async function fetchStopsByIds(
   stopIds: string[],
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_STOPS_ENDPOINT,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = scheduledFetch
 ): Promise<Map<string, string>> {
   const uniqueStopIds = Array.from(
     new Set(
@@ -300,7 +341,7 @@ export async function fetchTripsByIds(
   tripIds: string[],
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_TRIPS_ENDPOINT,
-  fetchImpl: FetchLike = fetch
+  fetchImpl: FetchLike = scheduledFetch
 ): Promise<Map<string, TripMetadata>> {
   const uniqueTripIds = Array.from(
     new Set(

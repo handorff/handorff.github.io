@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GridRenderer, interpolateBuffers } from "./renderer";
 
 describe("interpolateBuffers", () => {
@@ -103,6 +103,37 @@ describe("GridRenderer grid line color", () => {
     ).drawGridLines(0, 0, 20, 20, 10);
 
     expect(context.strokeStyle).toBe(updatedColor);
+  });
+});
+
+describe("GridRenderer content mask", () => {
+  it("fades cells near text, leaves distant cells intact, and restores them when content is hidden", () => {
+    const { renderer, context } = createRendererWithContext();
+    context.save = vi.fn();
+    context.restore = vi.fn();
+    context.fillRect = vi.fn();
+    renderer.resize(40, 40);
+    renderer.setContentRects([{ left: 10, top: 10, width: 5, height: 5 }]);
+    const draw = () => (renderer as unknown as {
+      drawFrame: (buffer: Float32Array) => void;
+    }).drawFrame(new Float32Array(16));
+
+    draw();
+    expect(context.fillRect).toHaveBeenCalledWith(10, 10, 10, 10);
+    expect(context.globalCompositeOperation).toBe("destination-out");
+    expect(context.restore).toHaveBeenCalledOnce();
+
+    renderer.setContentRects([{ left: 500, top: 500, width: 5, height: 5 }]);
+    vi.mocked(context.fillRect).mockClear();
+    draw();
+    expect(context.fillRect).not.toHaveBeenCalled();
+
+    renderer.setContentRects([{ left: 10, top: 10, width: 5, height: 5 }]);
+    renderer.setContentMaskVisible(false);
+    for (let i = 0; i < 60; i += 1) draw();
+    vi.mocked(context.fillRect).mockClear();
+    draw();
+    expect(context.fillRect).not.toHaveBeenCalled();
   });
 });
 

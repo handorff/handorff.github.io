@@ -5,6 +5,7 @@ import {
   fetchPaginated,
   fetchRoutes,
   fetchVehicles,
+  fetchVehicleSnapshot,
   normalizeColorHex,
   normalizeSortOrder
 } from "./mbtaApi";
@@ -345,5 +346,35 @@ describe("MBTA resource parsing", () => {
 
     expect(result).toEqual(new Map());
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("vehicle snapshots", () => {
+  it("reuses included route colors, stops and valid trips across vehicle pages", async () => {
+    const fetchMock = createFetchMock({
+      "https://example.test/vehicles": {
+        data: [{ id: "red-1", attributes: { latitude: 42.36, longitude: -71.08 },
+          relationships: { route: { data: { id: "Red" } }, trip: { data: { id: "t1" } } } }],
+        included: [
+          { type: "route", id: "Red", attributes: { color: "DA291C", sort_order: 1 } },
+          { type: "trip", id: "t1", attributes: { headsign: "Alewife" } }
+        ],
+        links: { next: "/vehicles?page=2" }
+      },
+      "https://example.test/vehicles?page=2": {
+        data: [],
+        included: [
+          { type: "route", id: "77", attributes: { color: "FFC72C" } },
+          { type: "stop", id: "s1", attributes: { name: "Central" } }
+        ]
+      }
+    });
+    const snapshot = await fetchVehicleSnapshot("https://example.test", "/vehicles", fetchMock);
+    expect(snapshot.vehicles).toHaveLength(1);
+    expect(snapshot.routes.map((r) => r.colorHex)).toEqual(["#da291c", "#ffc72c"]);
+    expect(snapshot.trips.get("t1")?.destination).toBe("Alewife");
+    expect(snapshot.stops.get("s1")).toBe("Central");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
