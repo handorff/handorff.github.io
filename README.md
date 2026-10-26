@@ -48,9 +48,9 @@ Primary app configuration is in `src/config.ts`:
 
 The app polls `/vehicles` every 10 seconds, including sparse route, stop, and trip data in the same response. Route colors and tooltip labels use those included resources, so the app does not separately load all routes or batch-fetch trip metadata for the whole fleet. Pagination adds requests when necessary.
 
-Route shapes are fetched and cached only when a vehicle is selected. Requests share a queue with at least 3.5 seconds between request starts. A 429 or an exhausted rate-limit response pauses the queue until `Retry-After` / `x-ratelimit-reset`, or 60 seconds when no usable reset is supplied. The last successful grid stays visible during failures. Background-tab polling is paused.
+Route shapes are fetched and cached only when a vehicle is selected. Requests share a queue with at least 3.5 seconds between request starts. A 429 or an exhausted rate-limit response pauses the queue until `Retry-After` / `x-ratelimit-reset`, or 60 seconds when no usable reset is supplied. The last successful grid stays visible during failures. Background-tab polling is paused. Polling and animation restart when Back/Forward restores a page from the browser cache. The client honors the Worker’s `Retry-After` delay on temporary 503 outages as well as upstream rate limits.
 
-The frontend defaults to `https://mbta-proxy.handorff-paul.workers.dev`. Override the public backend address with `VITE_MBTA_API_BASE_URL` (see `.env.example`). The MBTA API key lives only in the Worker's encrypted `MBTA_API_KEY` secret. Never put it in a Vite environment variable, which would embed it in public JavaScript.
+The production frontend defaults to `https://mbta-proxy.handorff-paul.workers.dev`. Local development uses Vite’s `/api/mbta/` proxy to that same backend, avoiding browser-to-Worker connection issues. Requests time out after 15 seconds so a stalled connection cannot block subsequent polls. Override the public backend address with `VITE_MBTA_API_BASE_URL` (see `.env.example`). The MBTA API key lives only in the Worker's encrypted `MBTA_API_KEY` secret. Never put it in a Vite environment variable, which would embed it in public JavaScript.
 
 ## Caching Worker
 

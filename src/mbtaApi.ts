@@ -11,7 +11,9 @@ import { createMbtaFetch } from "./requestScheduler";
 const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 
-const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init));
+const scheduledFetch = createMbtaFetch((input, init) =>
+  fetch(input, { ...init, signal: AbortSignal.timeout(15_000) })
+);
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -31,7 +33,8 @@ interface JsonApiResource {
 }
 
 function buildUrl(baseUrl: string, endpoint: string): string {
-  return new URL(endpoint, baseUrl).toString();
+  // Preserve a backend path prefix, including the local development proxy.
+  return new URL(endpoint.replace(/^\//, ""), `${baseUrl.replace(/\/$/, "")}/`).toString();
 }
 
 function resolveNextUrl(currentUrl: string, nextUrl: string): string {
@@ -287,7 +290,7 @@ export async function fetchRoutes(
 }
 
 function buildStopsByIdsUrl(baseUrl: string, endpoint: string, stopIds: string[]): string {
-  const url = new URL(endpoint, baseUrl);
+  const url = new URL(buildUrl(baseUrl, endpoint));
   url.searchParams.set("filter[id]", stopIds.join(","));
   url.searchParams.set("fields[stop]", "name");
   url.searchParams.set("page[limit]", "1000");
@@ -295,7 +298,7 @@ function buildStopsByIdsUrl(baseUrl: string, endpoint: string, stopIds: string[]
 }
 
 function buildTripsByIdsUrl(baseUrl: string, endpoint: string, tripIds: string[]): string {
-  const url = new URL(endpoint, baseUrl);
+  const url = new URL(buildUrl(baseUrl, endpoint));
   url.searchParams.set("filter[id]", tripIds.join(","));
   url.searchParams.set("include", "shape");
   url.searchParams.set("fields[trip]", "headsign,shape");

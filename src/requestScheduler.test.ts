@@ -21,6 +21,7 @@ describe("MBTA request scheduling", () => {
 
   it.each([
     [{ "retry-after": "90" }, 91_000, 429],
+    [{ "retry-after": "120" }, 121_000, 503],
     [{ "retry-after": "Mon, 26 Oct 2026 12:01:30 GMT" }, 91_000, 429],
     [{ "x-ratelimit-reset": String(Date.parse("2026-10-26T12:01:30Z") / 1000) }, 91_000, 429],
     [{}, 60_000, 429],

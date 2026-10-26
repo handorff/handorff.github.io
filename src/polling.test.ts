@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPollingLoop } from "./polling";
+import { bindPageLifecycle, createPollingLoop } from "./polling";
 
 describe("createPollingLoop", () => {
   beforeEach(() => {
@@ -91,5 +91,46 @@ describe("createPollingLoop", () => {
     loop.setPaused(false);
     await Promise.resolve();
     expect(task).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("page lifecycle", () => {
+  it("resumes stopped polling when Back restores a cached page", async () => {
+    vi.useFakeTimers();
+    try {
+      const target = new EventTarget();
+      const task = vi.fn().mockResolvedValue(undefined);
+      const loop = createPollingLoop({ intervalMs: 1000, task });
+      const stopRenderer = vi.fn();
+      const startRenderer = vi.fn();
+      bindPageLifecycle(target, () => {
+        loop.stop();
+        stopRenderer();
+      }, () => {
+        startRenderer();
+        loop.start();
+      });
+      loop.start();
+      await vi.advanceTimersByTimeAsync(0);
+      target.dispatchEvent(new Event("pagehide"));
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(stopRenderer).toHaveBeenCalledTimes(1);
+      // Ordinary initial pageshow must not start a second loop.
+      target.dispatchEvent(new Event("pageshow"));
+      expect(startRenderer).not.toHaveBeenCalled();
+      const restored = new Event("pageshow");
+      Object.defineProperty(restored, "persisted", { value: true });
+      target.dispatchEvent(restored);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(startRenderer).toHaveBeenCalledTimes(1);
+      expect(task).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(task).toHaveBeenCalledTimes(3);
+      loop.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

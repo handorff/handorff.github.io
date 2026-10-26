@@ -76,3 +76,15 @@ export function createPollingLoop(options: PollingOptions): PollingLoop {
     }
   };
 }
+
+// A page restored from the browser's back/forward cache keeps its old JS state.
+export function bindPageLifecycle(
+  target: EventTarget,
+  suspend: () => void,
+  resume: () => void
+): void {
+  target.addEventListener("pagehide", suspend);
+  target.addEventListener("pageshow", (event) => {
+    if ((event as PageTransitionEvent).persisted) resume();
+  });
+}

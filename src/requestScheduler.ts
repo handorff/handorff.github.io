@@ -22,7 +22,9 @@ export function createMbtaFetch(fetchImpl: FetchLike): FetchLike {
       nextRequestAt = Date.now() + REQUEST_SPACING_MS;
       const response = await fetchImpl(input, init);
       const now = Date.now();
-      if (response.status === 429 || response.headers.get("x-ratelimit-remaining") === "0") {
+      if (response.status === 429 ||
+          (response.status === 503 && response.headers.has("retry-after")) ||
+          response.headers.get("x-ratelimit-remaining") === "0") {
         const resetAt = resetTime(response, now);
         nextRequestAt = Math.max(nextRequestAt, resetAt > now ? resetAt + 1000 : now + DEFAULT_COOLDOWN_MS);
       }

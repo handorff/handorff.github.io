@@ -18,7 +18,7 @@ import {
   latLonToCell
 } from "./grid";
 import { fetchStopsByIds, fetchTripsByIds, fetchVehicleSnapshot } from "./mbtaApi";
-import { createPollingLoop } from "./polling";
+import { bindPageLifecycle, createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
 import { rasterizeShapeToCellIndices } from "./shapeGrid";
 import type { RouteMeta, Vehicle } from "./types";
@@ -764,10 +764,17 @@ function bootstrap(): void {
     }
   });
   document.addEventListener("visibilitychange", onVisibilityChange);
-  window.addEventListener("pagehide", () => {
+  bindPageLifecycle(window, () => {
     pollingLoop.stop();
     contentObserver.disconnect();
     renderer.stop();
+  }, () => {
+    contentObserver.observe(content);
+    contentObserver.observe(header);
+    updateContentMask();
+    renderer.start();
+    onVisibilityChange();
+    pollingLoop.start();
   });
 }
 
