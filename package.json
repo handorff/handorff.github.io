@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "^24.22.1"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -11,9 +14,9 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@types/node": "22.19.13",
-    "typescript": "5.9.3",
-    "vite": "6.4.1",
-    "vitest": "3.2.4"
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   }
 }

@@ -4,7 +4,11 @@ Abstract, live MBTA-powered background grid for a personal website. Vehicle loca
 
 ## Local Development
 
+Use Node.js 24.22.1 (LTS). The version is pinned in `.nvmrc`, which GitHub Actions also reads.
+
 ```bash
+nvm install
+nvm use
 npm install
 npm run dev
 ```
