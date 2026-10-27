@@ -26,6 +26,10 @@ npm run preview
 npm test
 ```
 
+## Pages
+
+Home (`index.html`) contains the bio, and Projects (`projects/index.html`) contains the project list. Both pages share the transit background, styles, and controls through `src/main.ts`. Vite builds both HTML entry points so `/` and `/projects/` work directly on GitHub Pages. Navigation uses Vite's `BASE_URL` to support repository subpaths. `src/navigation.ts` enhances the navigation links by fetching and swapping only the main content, keeping the canvas, transit polling, and controls alive between pages. It updates the URL, title, and active link, supports Back/Forward, and falls back to ordinary navigation if loading fails. Loaded page content is cached for the current browser session.
+
 ## Configuration
 
 Primary app configuration is in `src/config.ts`:

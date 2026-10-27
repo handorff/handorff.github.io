@@ -18,6 +18,7 @@ import {
   latLonToCell
 } from "./grid";
 import { fetchStopsByIds, fetchTripsByIds, fetchVehicleSnapshot } from "./mbtaApi";
+import { bindNavigation } from "./navigation";
 import { bindPageLifecycle, createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
 import { rasterizeShapeToCellIndices } from "./shapeGrid";
@@ -604,8 +605,14 @@ function bootstrap(): void {
     renderer.setState(computeBuffer(latestVehicles));
   };
 
-  header.querySelectorAll<HTMLAnchorElement>("nav a").forEach((link) => {
-    link.addEventListener("click", () => setContentVisibility(true));
+  bindNavigation({
+    header,
+    content,
+    overlay: contentOverlay,
+    onNavigate: () => {
+      setContentVisibility(true);
+      updateContentMask();
+    }
   });
 
   const onVisibilityChange = (): void => {

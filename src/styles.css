@@ -254,7 +254,8 @@ body {
 }
 
 #site-header nav a:hover,
-#site-header nav a:focus-visible {
+#site-header nav a:focus-visible,
+#site-header nav a[aria-current="page"] {
   opacity: 1;
 }
 
