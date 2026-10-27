@@ -12,6 +12,10 @@ const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 
 const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init));
+// Shape metadata is requested during selection. The proxy manages upstream
+// caching/rate limits; direct MBTA access retains the anonymous request pacing.
+const shapeFetch = new URL(MBTA_API_BASE_URL).hostname === "api-v3.mbta.com"
+  ? scheduledFetch : scheduledFetch.interactive;
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -342,7 +346,7 @@ export async function fetchTripsByIds(
   tripIds: string[],
   baseUrl: string = MBTA_API_BASE_URL,
   endpoint: string = MBTA_TRIPS_ENDPOINT,
-  fetchImpl: FetchLike = scheduledFetch
+  fetchImpl: FetchLike = shapeFetch
 ): Promise<Map<string, TripMetadata>> {
   const uniqueTripIds = Array.from(
     new Set(

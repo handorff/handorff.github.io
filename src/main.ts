@@ -22,6 +22,7 @@ import { bindNavigation } from "./navigation";
 import { bindPageLifecycle, createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
 import { rasterizeShapeToCellIndices } from "./shapeGrid";
+import { createShapePrefetcher } from "./shapePrefetch";
 import type { RouteMeta, Vehicle } from "./types";
 import {
   applyTheme,
@@ -42,6 +43,7 @@ const TOOLTIP_MARGIN_PX = 12;
 const DIMMED_OCCUPIED_CELL_ALPHA = 0.18;
 const SHAPE_CELL_ALPHA = 0.76;
 const SELECTED_CELL_ALPHA = 0.94;
+const SELECTION_TRANSITION_MS = 180;
 
 function requireCanvas(selector: string): HTMLCanvasElement {
   const element = document.querySelector(selector);
@@ -224,14 +226,20 @@ function bootstrap(): void {
       markDebugSourceUpdated("trips");
       return result;
     },
-    onDataChanged: () => {
-      if (selectedVehicleId !== null && !isContentVisible) {
-        renderer.setState(computeBuffer(latestVehicles));
+    onDataChanged: (tripId) => {
+      if (selectedVehicleId !== null && !isContentVisible &&
+          (!tripId || getSelectedVehicle()?.relatedTripId === tripId)) {
+        renderSelectionState();
         updateSelectionVisualization?.();
         renderTooltipForSelection?.();
       }
     }
   });
+
+  const shapePrefetcher = createShapePrefetcher(
+    (vehicle) => tooltipMetadata.ensureShapeLoaded(vehicle),
+    (error) => console.error("Unable to prefetch route shape.", error)
+  );
 
   const getRouteSortOrder = (routeId: string | null): number => {
     if (!routeId) {
@@ -311,7 +319,7 @@ function bootstrap(): void {
     hideTooltip();
     hideSelectedOutline();
     if (rerender && !isContentVisible) {
-      renderer.setState(computeBuffer(latestVehicles));
+      renderSelectionState();
     }
   };
 
@@ -460,7 +468,12 @@ function bootstrap(): void {
     });
   };
 
+  const renderSelectionState = (): void => {
+    renderer.setState(computeBuffer(latestVehicles), performance.now(), SELECTION_TRANSITION_MS);
+  };
+
   const prefetchSelectedVehicleMetadata = (vehicle: Vehicle | null): void => {
+    shapePrefetcher.cancel();
     if (!vehicle || isContentVisible) {
       return;
     }
@@ -591,6 +604,7 @@ function bootstrap(): void {
 
   const setContentVisibility = (visible: boolean): void => {
     isContentVisible = visible;
+    shapePrefetcher.cancel();
     contentVisibilityToggle.checked = visible;
     tooltipMetadata.setHiddenModeEnabled(!isContentVisible);
     setContentLayerVisible(content, contentOverlay, isContentVisible);
@@ -616,6 +630,7 @@ function bootstrap(): void {
   });
 
   const onVisibilityChange = (): void => {
+    if (document.hidden) shapePrefetcher.cancel();
     pollingLoop.setPaused(document.hidden);
   };
 
@@ -631,24 +646,29 @@ function bootstrap(): void {
 
   canvas.addEventListener("pointermove", (event) => {
     if (!canShowHoverOutline()) {
+      shapePrefetcher.cancel();
       hideHoverOutline();
       return;
     }
 
     const hoveredCell = renderer.getCellFromViewportPoint(event.clientX, event.clientY);
     if (!hoveredCell) {
+      shapePrefetcher.cancel();
       hideHoverOutline();
       return;
     }
 
     updateHoverOutline(hoveredCell.index);
+    shapePrefetcher.target(getVehiclesInCell(hoveredCell.index)[0] ?? null);
   });
 
   canvas.addEventListener("pointerleave", () => {
+    shapePrefetcher.cancel();
     hideHoverOutline();
   });
 
   canvas.addEventListener("click", (event) => {
+    shapePrefetcher.cancel();
     if (isContentVisible) {
       setContentVisibility(false);
       return;
@@ -668,7 +688,7 @@ function bootstrap(): void {
 
     selectedVehicleId = vehiclesInCell[0].id;
     prefetchSelectedVehicleMetadata(vehiclesInCell[0]);
-    renderer.setState(computeBuffer(latestVehicles));
+    renderSelectionState();
     updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
@@ -700,7 +720,7 @@ function bootstrap(): void {
     const previousIndex = wrapIndex(currentIndex - 1, total);
     selectedVehicleId = vehiclesInCell[previousIndex].id;
     prefetchSelectedVehicleMetadata(vehiclesInCell[previousIndex]);
-    renderer.setState(computeBuffer(latestVehicles));
+    renderSelectionState();
     updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
@@ -732,15 +752,32 @@ function bootstrap(): void {
     const nextIndex = wrapIndex(currentIndex + 1, total);
     selectedVehicleId = vehiclesInCell[nextIndex].id;
     prefetchSelectedVehicleMetadata(vehiclesInCell[nextIndex]);
-    renderer.setState(computeBuffer(latestVehicles));
+    renderSelectionState();
     updateSelectionVisualization?.();
     renderTooltipForSelection?.();
   });
+
+  for (const [button, offset] of [[tooltipPrev, -1], [tooltipNext, 1]] as const) {
+    const prefetchAdjacentVehicle = (): void => {
+      if (isContentVisible || button.disabled) return;
+      const selected = getSelectedVehicle();
+      const placement = selected && getVehiclePlacement(selected);
+      if (!placement) return;
+      const vehicles = getVehiclesInCell(placement.index);
+      const index = vehicles.findIndex((vehicle) => vehicle.id === selectedVehicleId);
+      shapePrefetcher.target(vehicles[wrapIndex(index + offset, vehicles.length)] ?? null);
+    };
+    button.addEventListener("focus", prefetchAdjacentVehicle);
+    button.addEventListener("pointerenter", prefetchAdjacentVehicle);
+    button.addEventListener("blur", () => shapePrefetcher.cancel());
+    button.addEventListener("pointerleave", () => shapePrefetcher.cancel());
+  }
 
   onVisibilityChange();
   pollingLoop.start();
 
   window.addEventListener("resize", () => {
+    shapePrefetcher.cancel();
     const nextRenderDims = calculateRenderGridDimensions(
       baseDims,
       window.innerWidth,
@@ -772,6 +809,7 @@ function bootstrap(): void {
   });
   document.addEventListener("visibilitychange", onVisibilityChange);
   bindPageLifecycle(window, () => {
+    shapePrefetcher.cancel();
     pollingLoop.stop();
     contentObserver.disconnect();
     renderer.stop();

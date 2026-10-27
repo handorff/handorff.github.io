@@ -70,6 +70,7 @@ export class GridRenderer {
   private readonly cellSizePx: number;
   private readonly cellGapPx: number;
   private readonly transitionMs: number;
+  private activeTransitionMs: number;
   private readonly fromBuffer: Float32Array;
   private readonly toBuffer: Float32Array;
   private readonly frameBuffer: Float32Array;
@@ -95,6 +96,7 @@ export class GridRenderer {
     this.cellSizePx = options.cellSizePx;
     this.cellGapPx = options.cellGapPx;
     this.transitionMs = options.transitionMs;
+    this.activeTransitionMs = options.transitionMs;
     this.gridLineColor = options.gridLineColor ?? DEFAULT_GRID_LINE_COLOR;
 
     const channelCount = this.rows * this.cols * 4;
@@ -115,7 +117,11 @@ export class GridRenderer {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
 
-  public setState(nextBuffer: Float32Array, nowMs: number = performance.now()): void {
+  public setState(
+    nextBuffer: Float32Array,
+    nowMs: number = performance.now(),
+    transitionMs: number = this.transitionMs
+  ): void {
     if (nextBuffer.length !== this.toBuffer.length) {
       throw new Error("Incoming state buffer does not match renderer grid size.");
     }
@@ -123,6 +129,7 @@ export class GridRenderer {
     this.fromBuffer.set(this.frameBuffer);
     this.toBuffer.set(nextBuffer);
     this.transitionStartMs = nowMs;
+    this.activeTransitionMs = transitionMs;
   }
 
   public start(): void {
@@ -218,7 +225,7 @@ export class GridRenderer {
   }
 
   private draw(nowMs: number): void {
-    const progress = this.transitionMs <= 0 ? 1 : (nowMs - this.transitionStartMs) / this.transitionMs;
+    const progress = this.activeTransitionMs <= 0 ? 1 : (nowMs - this.transitionStartMs) / this.activeTransitionMs;
     interpolateBuffers(this.fromBuffer, this.toBuffer, progress, this.frameBuffer);
     this.drawFrame(this.frameBuffer);
   }

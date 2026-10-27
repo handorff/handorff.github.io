@@ -11,7 +11,7 @@ const TRIP_BATCH_SIZE = 50;
 interface TooltipMetadataStoreOptions {
   fetchStopsByIds: (stopIds: string[]) => Promise<Map<string, string>>;
   fetchTripsByIds: (tripIds: string[]) => Promise<Map<string, TripMetadata>>;
-  onDataChanged?: () => void;
+  onDataChanged?: (tripId?: string) => void;
 }
 
 function normalizeId(id: string | null): string | null {
@@ -99,7 +99,7 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
         const metadata = await options.fetchTripsByIds([id]);
         tripCache.set(id, metadata.get(id) ?? null);
         detailedTripIds.add(id);
-        notifyDataChanged();
+        notifyDataChanged(id);
       } finally {
         shapeRequests.delete(id);
       }
@@ -111,8 +111,8 @@ export function createTooltipMetadataStore(options: TooltipMetadataStoreOptions)
   let hiddenModeEnabled = false;
   let hiddenModeGeneration = 0;
 
-  const notifyDataChanged = (): void => {
-    options.onDataChanged?.();
+  const notifyDataChanged = (tripId?: string): void => {
+    options.onDataChanged?.(tripId);
   };
 
   const setHiddenModeEnabled = (enabled: boolean): void => {

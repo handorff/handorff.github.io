@@ -196,3 +196,25 @@ describe("GridRenderer geometry helpers", () => {
     });
   });
 });
+
+describe("GridRenderer transition duration", () => {
+  it("uses a shorter selection fade and restores the default for the next update", () => {
+    const { renderer } = createRendererWithContext();
+    const drawFrame = vi.spyOn(renderer as unknown as { drawFrame: (buffer: Float32Array) => void }, "drawFrame")
+      .mockImplementation(() => {});
+    const draw = (time: number) => (renderer as unknown as { draw: (time: number) => void }).draw(time);
+    const occupied = new Float32Array(16);
+    occupied.set([10, 20, 30, 1]);
+    renderer.setState(occupied, 0, 20);
+    draw(10);
+    expect(drawFrame.mock.calls.at(-1)![0][3]).toBeCloseTo(0.5);
+    draw(20);
+    expect(drawFrame.mock.calls.at(-1)![0][3]).toBe(1);
+
+    renderer.setState(new Float32Array(16), 20);
+    draw(40);
+    expect(drawFrame.mock.calls.at(-1)![0][3]).toBeCloseTo(0.8);
+    draw(120);
+    expect(drawFrame.mock.calls.at(-1)![0][3]).toBe(0);
+  });
+});

@@ -4,6 +4,70 @@ import { createMbtaFetch } from "./requestScheduler";
 afterEach(() => vi.useRealTimers());
 
 describe("MBTA request scheduling", () => {
+  it("starts a shape request while a vehicle poll is still in flight", async () => {
+    vi.useFakeTimers();
+    let finishPoll!: (response: Response) => void;
+    const fetchImpl = vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finishPoll = resolve; }))
+      .mockResolvedValue(new Response("shape"));
+    const request = createMbtaFetch(fetchImpl);
+    const poll = request("https://example.test/vehicles");
+    await vi.advanceTimersByTimeAsync(0);
+    const shape = await request.interactive("https://example.test/trips");
+    expect(await shape.text()).toBe("shape");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    finishPoll(new Response("vehicles"));
+    await poll;
+  });
+
+  it("serializes shape requests without the polling gap", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(async () => new Response("{}"));
+    const request = createMbtaFetch(fetchImpl);
+    const start = Date.now();
+    await request("https://example.test/vehicles");
+    await Promise.all([
+      request.interactive("https://example.test/trips?filter[id]=1"),
+      request.interactive("https://example.test/trips?filter[id]=2")
+    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(Date.now()).toBe(start);
+  });
+
+  it.each(["background", "interactive"] as const)("shares a %s cooldown with both queues", async (source) => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "retry-after": "90" } }))
+      .mockImplementation(async () => new Response("{}"));
+    const request = createMbtaFetch(fetchImpl);
+    await (source === "background" ? request : request.interactive)("https://example.test/trips");
+    const poll = request("https://example.test/vehicles");
+    const shape = request.interactive("https://example.test/trips");
+    await vi.advanceTimersByTimeAsync(90_999);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.all([poll, shape]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("rechecks cooldown when a poll is already waiting for its spacing", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response("{}"))
+      .mockResolvedValueOnce(new Response("{}", { status: 503, headers: { "retry-after": "90" } }))
+      .mockResolvedValue(new Response("{}"));
+    const request = createMbtaFetch(fetchImpl);
+    await request("https://example.test/vehicles");
+    const poll = request("https://example.test/vehicles");
+    await vi.advanceTimersByTimeAsync(1000);
+    await request.interactive("https://example.test/trips");
+    await vi.advanceTimersByTimeAsync(90_999);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await poll;
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it("paces concurrent requests through one queue", async () => {
     vi.useFakeTimers();
     const fetchImpl = vi.fn(async () => new Response("{}"));
@@ -56,6 +120,20 @@ describe("MBTA request scheduling", () => {
 });
 
 describe("request deadlines", () => {
+  it("times out a stalled shape body and releases the interactive queue", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(new ReadableStream({ start() {} })))
+      .mockResolvedValue(new Response("{}"));
+    const request = createMbtaFetch(fetchImpl, 100);
+    const first = expect(request.interactive("https://example.test/trips")).rejects.toThrow("timed out");
+    const second = request.interactive("https://example.test/trips");
+    await vi.advanceTimersByTimeAsync(100);
+    await first;
+    expect(fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+    expect((await second).ok).toBe(true);
+  });
+
   it.each(["headers", "body"])("releases the queue after stalled %s, even when abort is ignored", async stage => {
     vi.useFakeTimers();
     const fetchImpl = vi.fn().mockImplementationOnce(() => stage === "headers"
