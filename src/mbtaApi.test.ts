@@ -396,11 +396,6 @@ describe("backend path prefixes", () => {
 describe("stalled request recovery", () => {
   it("aborts a stalled production fetch and allows the next poll to succeed", async () => {
     vi.useFakeTimers();
-    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(new DOMException("Timed out", "TimeoutError")), ms);
-      return controller.signal;
-    });
     const fetchMock = vi.fn()
       .mockImplementationOnce((_url: string | URL, init: RequestInit) => new Promise((_resolve, reject) => {
         init.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
@@ -409,15 +404,14 @@ describe("stalled request recovery", () => {
     vi.stubGlobal("fetch", fetchMock);
     try {
       const first = fetchVehicleSnapshot("https://proxy.test", "/vehicles");
-      const rejected = expect(first).rejects.toThrow("Timed out");
+      const rejected = expect(first).rejects.toMatchObject({ name: "TimeoutError" });
       await vi.advanceTimersByTimeAsync(15_000);
       await rejected;
       await expect(fetchVehicleSnapshot("https://proxy.test", "/vehicles"))
         .resolves.toMatchObject({ vehicles: [] });
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(timeout).toHaveBeenCalledWith(15_000);
+      expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     } finally {
-      timeout.mockRestore();
       vi.unstubAllGlobals();
       vi.useRealTimers();
     }

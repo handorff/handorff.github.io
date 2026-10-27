@@ -54,3 +54,52 @@ describe("MBTA request scheduling", () => {
     await expect(next).resolves.toBeInstanceOf(Response);
   });
 });
+
+describe("request deadlines", () => {
+  it.each(["headers", "body"])("releases the queue after stalled %s, even when abort is ignored", async stage => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn().mockImplementationOnce(() => stage === "headers"
+      ? new Promise(() => {}) : Promise.resolve(new Response(new ReadableStream({ start() {} }))))
+      .mockResolvedValue(new Response('{"data":[]}'));
+    const request = createMbtaFetch(fetchImpl, 100);
+    const first = expect(request("https://example.test/vehicles")).rejects.toThrow("timed out");
+    const second = request("https://example.test/vehicles");
+    await vi.advanceTimersByTimeAsync(100);
+    await first;
+    expect(fetchImpl.mock.calls[0][1].signal.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(3400);
+    expect(await (await second).json()).toEqual({ data: [] });
+  });
+
+  it("retains cooldown headers even if reading the rate-limit body stalls", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(new ReadableStream({ start() {} }), {
+      status: 429, headers: { "Retry-After": "90" }
+    })).mockResolvedValue(new Response("{}"));
+    const request = createMbtaFetch(fetchImpl, 100);
+    const first = expect(request("https://example.test/vehicles")).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(100);
+    await first;
+    const next = request("https://example.test/vehicles");
+    await vi.advanceTimersByTimeAsync(90_899);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await next;
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves caller cancellation and allows subsequent requests", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchImpl = vi.fn().mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue(new Response("{}"));
+    const request = createMbtaFetch(fetchImpl);
+    const first = expect(request("https://example.test/vehicles", { signal: controller.signal })).rejects.toThrow("canceled");
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort(new Error("canceled"));
+    await first;
+    const second = request("https://example.test/vehicles");
+    await vi.advanceTimersByTimeAsync(3500);
+    expect((await second).ok).toBe(true);
+  });
+});

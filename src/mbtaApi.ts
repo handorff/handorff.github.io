@@ -11,9 +11,7 @@ import { createMbtaFetch } from "./requestScheduler";
 const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 
-const scheduledFetch = createMbtaFetch((input, init) =>
-  fetch(input, { ...init, signal: AbortSignal.timeout(15_000) })
-);
+const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init));
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 

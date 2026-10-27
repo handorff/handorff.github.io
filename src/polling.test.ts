@@ -134,3 +134,28 @@ describe("page lifecycle", () => {
     }
   });
 });
+
+describe("polling request recovery", () => {
+  it("keeps the last frame during a body timeout and automatically polls again", async () => {
+    const { createMbtaFetch } = await import("./requestScheduler");
+    vi.useFakeTimers();
+    try {
+      let frame = "last successful frame";
+      const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(new ReadableStream({ start() {} })))
+        .mockResolvedValue(new Response("new frame"));
+      const request = createMbtaFetch(fetchImpl, 100);
+      const loop = createPollingLoop({ intervalMs: 10_000, task: async () => {
+        try { frame = await (await request("https://example.test/vehicles")).text(); }
+        catch { /* main.ts keeps the previous successful frame */ }
+      } });
+      loop.start();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(loop.isInFlight()).toBe(false);
+      expect(frame).toBe("last successful frame");
+      await vi.advanceTimersByTimeAsync(9900);
+      expect(frame).toBe("new frame");
+      expect(loop.isInFlight()).toBe(false);
+      loop.stop();
+    } finally { vi.useRealTimers(); }
+  });
+});

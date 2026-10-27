@@ -12,7 +12,9 @@ function resetTime(response: Response, now: number): number {
   return Math.max(Number.isFinite(reset) ? reset : 0, Number.isFinite(retryAt) ? retryAt : 0);
 }
 
-export function createMbtaFetch(fetchImpl: FetchLike): FetchLike {
+// The deadline starts when a queued request is dispatched, after spacing/cooldown.
+// Buffering the body keeps the scheduler occupied until the entire request settles.
+export function createMbtaFetch(fetchImpl: FetchLike, timeoutMs = 15_000): FetchLike {
   let queue: Promise<unknown> = Promise.resolve();
   let nextRequestAt = 0;
   return (input, init) => {
@@ -20,15 +22,36 @@ export function createMbtaFetch(fetchImpl: FetchLike): FetchLike {
       const waitMs = nextRequestAt - Date.now();
       if (waitMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
       nextRequestAt = Date.now() + REQUEST_SPACING_MS;
-      const response = await fetchImpl(input, init);
-      const now = Date.now();
-      if (response.status === 429 ||
-          (response.status === 503 && response.headers.has("retry-after")) ||
-          response.headers.get("x-ratelimit-remaining") === "0") {
-        const resetAt = resetTime(response, now);
-        nextRequestAt = Math.max(nextRequestAt, resetAt > now ? resetAt + 1000 : now + DEFAULT_COOLDOWN_MS);
+      const controller = new AbortController();
+      const cancel = () => controller.abort(init?.signal?.reason);
+      init?.signal?.addEventListener("abort", cancel, { once: true });
+      if (init?.signal?.aborted) cancel();
+      const timer = setTimeout(() => controller.abort(new DOMException("MBTA request timed out", "TimeoutError")), timeoutMs);
+      let rejectAbort: () => void = () => {};
+      const aborted = new Promise<never>((_, reject) => {
+        rejectAbort = () => reject(controller.signal.reason);
+        controller.signal.addEventListener("abort", rejectAbort, { once: true });
+        if (controller.signal.aborted) rejectAbort();
+      });
+      try {
+        controller.signal.throwIfAborted();
+        const response = await Promise.race([fetchImpl(input, { ...init, signal: controller.signal }), aborted]);
+        const now = Date.now();
+        if (response.status === 429 ||
+            (response.status === 503 && response.headers.has("retry-after")) ||
+            response.headers.get("x-ratelimit-remaining") === "0") {
+          const resetAt = resetTime(response, now);
+          nextRequestAt = Math.max(nextRequestAt, resetAt > now ? resetAt + 1000 : now + DEFAULT_COOLDOWN_MS);
+        }
+        const body = await Promise.race([response.arrayBuffer(), aborted]);
+        return new Response(response.status === 204 || response.status === 205 || response.status === 304 ? null : body, {
+          status: response.status, statusText: response.statusText, headers: response.headers
+        });
+      } finally {
+        clearTimeout(timer);
+        controller.signal.removeEventListener("abort", rejectAbort);
+        init?.signal?.removeEventListener("abort", cancel);
       }
-      return response;
     });
     // A failed request must not prevent later requests from using the queue.
     queue = request.catch(() => undefined);
