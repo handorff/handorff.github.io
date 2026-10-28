@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { bindMapNavigation } from "./mapNavigation";
 import type { GridRenderer } from "./renderer";
 
-function setup() {
+function setup(prefersReducedMotion = () => false) {
   const element = () => Object.assign(new EventTarget(), { hidden: true, disabled: false });
   const canvas = Object.assign(element(), {
     dataset: {} as Record<string, string>,
@@ -16,6 +16,7 @@ function setup() {
   const reset = element();
   const renderer = {
     getView: () => ({ zoom: 1, panX: 0, panY: 0 }),
+    animateView: vi.fn(), cancelViewAnimation: vi.fn(),
     setView: vi.fn(), panBy: vi.fn(), zoomAt: vi.fn()
   };
   const navigation = bindMapNavigation({
@@ -25,7 +26,7 @@ function setup() {
     zoomOut: zoomOut as unknown as HTMLButtonElement,
     reset: reset as unknown as HTMLButtonElement,
     getRenderer: () => renderer as unknown as GridRenderer,
-    onViewChanged: vi.fn(), onGestureStart: vi.fn()
+    onViewChanged: vi.fn(), onGestureStart: vi.fn(), prefersReducedMotion
   });
   const pointer = (type: string, x: number, y: number, id = 1) => {
     canvas.dispatchEvent(Object.assign(new Event(type), {
@@ -55,8 +56,18 @@ describe("map navigation", () => {
     expect(canvas.dataset.dragging).toBe("true");
     navigation.setEnabled(false);
     expect(controls.hidden).toBe(true);
-    expect(renderer.setView).toHaveBeenLastCalledWith({ zoom: 1, panX: 0, panY: 0 });
+    expect(renderer.animateView).toHaveBeenLastCalledWith({ zoom: 1, panX: 0, panY: 0 }, 600);
     expect(canvas.dataset.dragging).toBe("false");
+  });
+
+  it("skips return motion when reduced motion is preferred and cancels on re-entry", () => {
+    const { renderer, navigation } = setup(() => true);
+    navigation.setEnabled(true);
+    navigation.setEnabled(false);
+    expect(renderer.animateView).toHaveBeenCalledWith({ zoom: 1, panX: 0, panY: 0 }, 0);
+    renderer.cancelViewAnimation.mockClear();
+    navigation.setEnabled(true);
+    expect(renderer.cancelViewAnimation).toHaveBeenCalledOnce();
   });
 
   it("suppresses selection clicks after dragging, but allows the next tap", () => {

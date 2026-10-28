@@ -257,3 +257,47 @@ describe("extended background grid", () => {
     expect(context.lineTo).toHaveBeenCalledWith(400, 0);
   });
 });
+
+describe("map return animation", () => {
+  function setupAnimation() {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+    vi.spyOn(renderer as unknown as { drawFrame: (buffer: Float32Array) => void }, "drawFrame")
+      .mockImplementation(() => {});
+    const draw = (time: number) => (renderer as unknown as { draw: (time: number) => void }).draw(time);
+    renderer.setView({ zoom: 0.25, panX: 100, panY: -60 });
+    return { renderer, draw };
+  }
+
+  it("smoothly pans and zooms together, then lands exactly on the starting view", () => {
+    const { renderer, draw } = setupAnimation();
+    const home = { zoom: 1, panX: 0, panY: 0 };
+    renderer.animateView(home, 600, 100);
+    draw(100);
+    expect(renderer.getView()).toEqual({ zoom: 0.25, panX: 100, panY: -60 });
+    draw(400);
+    expect(renderer.getView()).toEqual({ zoom: 0.5, panX: 50, panY: -30 });
+    draw(700);
+    expect(renderer.getView()).toEqual(home);
+    draw(1000);
+    expect(renderer.getView()).toEqual(home);
+  });
+
+  it("lets renewed map interaction interrupt the return without jumping", () => {
+    const { renderer, draw } = setupAnimation();
+    renderer.animateView({ zoom: 1, panX: 0, panY: 0 }, 600, 0);
+    draw(300);
+    renderer.cancelViewAnimation();
+    renderer.panBy(20, 10);
+    draw(600);
+    expect(renderer.getView()).toEqual({ zoom: 0.5, panX: 70, panY: -20 });
+  });
+
+  it("returns immediately for reduced motion", () => {
+    const { renderer, draw } = setupAnimation();
+    renderer.animateView({ zoom: 1, panX: 0, panY: 0 }, 0, 0);
+    expect(renderer.getView()).toEqual({ zoom: 1, panX: 0, panY: 0 });
+    draw(300);
+    expect(renderer.getView()).toEqual({ zoom: 1, panX: 0, panY: 0 });
+  });
+});

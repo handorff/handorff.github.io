@@ -10,6 +10,7 @@ export function bindMapNavigation(options: {
   getRenderer: () => GridRenderer;
   onViewChanged: () => void;
   onGestureStart: () => void;
+  prefersReducedMotion?: () => boolean;
 }): { setEnabled: (enabled: boolean) => void } {
   const { canvas, controls, zoomIn, zoomOut, reset, getRenderer, onViewChanged, onGestureStart } = options;
   const pointers = new Map<number, { x: number; y: number }>();
@@ -104,6 +105,7 @@ export function bindMapNavigation(options: {
 
   return {
     setEnabled: (nextEnabled) => {
+      const wasEnabled = enabled;
       enabled = nextEnabled;
       controls.hidden = !enabled;
       canvas.dataset.interactive = String(enabled);
@@ -113,7 +115,13 @@ export function bindMapNavigation(options: {
       }
       pointers.clear();
       dragged = false;
-      if (!enabled) getRenderer().setView({ zoom: 1, panX: 0, panY: 0 });
+      if (enabled) {
+        getRenderer().cancelViewAnimation();
+      } else if (wasEnabled) {
+        getRenderer().animateView({ zoom: 1, panX: 0, panY: 0 }, options.prefersReducedMotion?.() ? 0 : 600);
+      } else {
+        getRenderer().setView({ zoom: 1, panX: 0, panY: 0 });
+      }
       update();
     }
   };

@@ -85,6 +85,7 @@ export class GridRenderer {
   private readonly frameBuffer: Float32Array;
   private gridLineColor: string;
   private view: MapView = { zoom: 1, panX: 0, panY: 0 };
+  private viewTransition: { from: MapView; to: MapView; startMs: number; durationMs: number } | null = null;
   private textRects: CellRect[] = [];
   private persistentRects: CellRect[] = [];
   private dpr = 1;
@@ -179,6 +180,28 @@ export class GridRenderer {
   }
 
   public setView(view: MapView): void {
+    this.cancelViewAnimation();
+    this.applyView(view);
+  }
+
+  public cancelViewAnimation(): void {
+    this.viewTransition = null;
+  }
+
+  public animateView(view: MapView, durationMs: number, nowMs = performance.now()): void {
+    if (durationMs <= 0) {
+      this.setView(view);
+      return;
+    }
+    this.viewTransition = {
+      from: this.getView(),
+      to: { ...view, zoom: Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, view.zoom)) },
+      startMs: nowMs,
+      durationMs
+    };
+  }
+
+  private applyView(view: MapView): void {
     this.view = { ...view, zoom: Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, view.zoom)) };
     this.setContentRects(this.textRects, this.persistentRects);
   }
@@ -265,6 +288,18 @@ export class GridRenderer {
   }
 
   private draw(nowMs: number): void {
+    if (this.viewTransition) {
+      const { from, to, startMs, durationMs } = this.viewTransition;
+      const progress = clamp01((nowMs - startMs) / durationMs);
+      const eased = progress * progress * (3 - 2 * progress);
+      // Interpolate zoom proportionally for a steady change in perceived scale.
+      this.applyView(progress >= 1 ? to : {
+        zoom: from.zoom * Math.pow(to.zoom / from.zoom, eased),
+        panX: from.panX + (to.panX - from.panX) * eased,
+        panY: from.panY + (to.panY - from.panY) * eased
+      });
+      if (progress >= 1) this.viewTransition = null;
+    }
     const progress = this.activeTransitionMs <= 0 ? 1 : (nowMs - this.transitionStartMs) / this.activeTransitionMs;
     if (!this.transitionComplete) {
       interpolateBuffers(this.fromBuffer, this.toBuffer, progress, this.frameBuffer);

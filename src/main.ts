@@ -581,6 +581,7 @@ function bootstrap(): void {
     zoomOut: requireButton("#map-zoom-out"),
     reset: requireButton("#map-reset"),
     getRenderer: () => renderer,
+    prefersReducedMotion: () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
     onGestureStart: () => {
       shapePrefetcher.cancel();
       hideHoverOutline();
