@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateTooltipPosition,
   formatVehicleStatusLabel,
   formatVehicleTitle,
   wrapIndex
@@ -35,35 +34,5 @@ describe("wrapIndex", () => {
     expect(wrapIndex(-1, 3)).toBe(2);
     expect(wrapIndex(3, 3)).toBe(0);
     expect(wrapIndex(5, 3)).toBe(2);
-  });
-});
-
-describe("calculateTooltipPosition", () => {
-  it("prefers placing tooltip to the right of the selected cell when space allows", () => {
-    const result = calculateTooltipPosition({
-      anchorRect: { left: 80, top: 100, width: 40, height: 40 },
-      tooltipWidth: 200,
-      tooltipHeight: 120,
-      viewportWidth: 900,
-      viewportHeight: 700,
-      marginPx: 12
-    });
-
-    expect(result.left).toBe(132);
-    expect(result.top).toBe(60);
-  });
-
-  it("clamps to viewport when there is no room on either side", () => {
-    const result = calculateTooltipPosition({
-      anchorRect: { left: 280, top: 10, width: 40, height: 40 },
-      tooltipWidth: 380,
-      tooltipHeight: 220,
-      viewportWidth: 420,
-      viewportHeight: 360,
-      marginPx: 12
-    });
-
-    expect(result.left).toBe(28);
-    expect(result.top).toBe(12);
   });
 });

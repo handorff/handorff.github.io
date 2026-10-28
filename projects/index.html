@@ -13,6 +13,33 @@
           <a href="%BASE_URL%">Home</a>
           <a href="%BASE_URL%projects/" aria-current="page">Projects</a>
         </nav>
+        <section id="vehicle-tooltip" data-open="false" hidden aria-live="polite" aria-label="Selected vehicle">
+          <h3 id="vehicle-tooltip-title"></h3>
+          <p id="vehicle-tooltip-status-line">
+            <span id="vehicle-tooltip-status"></span>
+            <span class="vehicle-tooltip-separator">:</span>
+            <span id="vehicle-tooltip-stop">Unknown stop</span>
+          </p>
+          <dl id="vehicle-tooltip-debug" hidden>
+            <div class="vehicle-tooltip-debug-row">
+              <dt>Route ID</dt>
+              <dd id="vehicle-tooltip-debug-route-id">Unknown</dd>
+            </div>
+            <div class="vehicle-tooltip-debug-row">
+              <dt>Trip ID</dt>
+              <dd id="vehicle-tooltip-debug-trip-id">Unknown</dd>
+            </div>
+            <div class="vehicle-tooltip-debug-row">
+              <dt>Stop ID</dt>
+              <dd id="vehicle-tooltip-debug-stop-id">Unknown</dd>
+            </div>
+          </dl>
+          <div class="vehicle-tooltip-nav">
+            <button id="vehicle-tooltip-prev" type="button" aria-label="Previous vehicle">&larr;</button>
+            <span id="vehicle-tooltip-index">1/1</span>
+            <button id="vehicle-tooltip-next" type="button" aria-label="Next vehicle">&rarr;</button>
+          </div>
+        </section>
         <div id="controls">
           <label class="toggle-control" for="toggle-content-visibility">
             <input id="toggle-content-visibility" type="checkbox" checked />
@@ -38,33 +65,6 @@
     </div>
     <div id="grid-hover-outline" data-visible="false" aria-hidden="true"></div>
     <div id="grid-selected-outline" data-visible="false" aria-hidden="true"></div>
-    <section id="vehicle-tooltip" data-open="false" hidden aria-live="polite">
-      <h3 id="vehicle-tooltip-title"></h3>
-      <p id="vehicle-tooltip-status-line">
-        <span id="vehicle-tooltip-status"></span>
-        <span class="vehicle-tooltip-separator">:</span>
-        <span id="vehicle-tooltip-stop">Unknown stop</span>
-      </p>
-      <dl id="vehicle-tooltip-debug" hidden>
-        <div class="vehicle-tooltip-debug-row">
-          <dt>Route ID</dt>
-          <dd id="vehicle-tooltip-debug-route-id">Unknown</dd>
-        </div>
-        <div class="vehicle-tooltip-debug-row">
-          <dt>Trip ID</dt>
-          <dd id="vehicle-tooltip-debug-trip-id">Unknown</dd>
-        </div>
-        <div class="vehicle-tooltip-debug-row">
-          <dt>Stop ID</dt>
-          <dd id="vehicle-tooltip-debug-stop-id">Unknown</dd>
-        </div>
-      </dl>
-      <div class="vehicle-tooltip-nav">
-        <button id="vehicle-tooltip-prev" type="button" aria-label="Previous vehicle">&larr;</button>
-        <span id="vehicle-tooltip-index">1/1</span>
-        <button id="vehicle-tooltip-next" type="button" aria-label="Next vehicle">&rarr;</button>
-      </div>
-    </section>
     <aside id="debug-footer" hidden aria-live="polite">
       <div class="debug-footer-row">
         <span class="debug-footer-label">Vehicles</span>

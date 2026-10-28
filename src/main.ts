@@ -31,7 +31,6 @@ import {
   setContentLayerVisible
 } from "./ui";
 import {
-  calculateTooltipPosition,
   formatVehicleStatusLabel,
   formatVehicleTitle,
   wrapIndex
@@ -39,7 +38,6 @@ import {
 import { createTooltipMetadataStore } from "./tooltipMetadata";
 import "./styles.css";
 
-const TOOLTIP_MARGIN_PX = 12;
 const DIMMED_OCCUPIED_CELL_ALPHA = 0.18;
 const SHAPE_CELL_ALPHA = 0.76;
 const SELECTED_CELL_ALPHA = 0.94;
@@ -355,27 +353,6 @@ function bootstrap(): void {
     return inCell;
   };
 
-  const positionTooltipForCell = (cellIndex: number): void => {
-    const row = Math.floor(cellIndex / renderDims.cols);
-    const col = cellIndex % renderDims.cols;
-
-    if (row < 0 || row >= renderDims.rows || col < 0 || col >= renderDims.cols) {
-      return;
-    }
-
-    const cellRect = renderer.getCellRect(row, col);
-    const position = calculateTooltipPosition({
-      anchorRect: cellRect,
-      tooltipWidth: tooltip.offsetWidth,
-      tooltipHeight: tooltip.offsetHeight,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      marginPx: TOOLTIP_MARGIN_PX
-    });
-    tooltip.style.left = `${position.left}px`;
-    tooltip.style.top = `${position.top}px`;
-  };
-
   const updateHoverOutline = (cellIndex: number): void => {
     const row = Math.floor(cellIndex / renderDims.cols);
     const col = cellIndex % renderDims.cols;
@@ -560,7 +537,6 @@ function bootstrap(): void {
 
     tooltip.hidden = false;
     tooltip.setAttribute("data-open", "true");
-    positionTooltipForCell(selectedPlacement.index);
   };
 
   const refreshVehicles = async (): Promise<void> => {

@@ -87,38 +87,43 @@ body {
 }
 
 #vehicle-tooltip {
-  position: fixed;
-  z-index: 3;
-  width: min(360px, calc(100vw - 1.5rem));
-  box-sizing: border-box;
-  border-radius: 14px;
-  border: 1px solid rgba(17, 24, 39, 0.15);
-  background: rgba(255, 255, 255, 0.96);
-  color: #111827;
-  padding: 1rem;
-  box-shadow: 0 20px 45px rgba(17, 24, 39, 0.2);
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
+  column-gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+  color: var(--text-color);
   pointer-events: auto;
 }
 
-#vehicle-tooltip[data-open="false"] {
+#vehicle-tooltip[hidden] {
   display: none;
 }
 
 #vehicle-tooltip-title {
+  grid-column: 2;
   margin: 0;
-  font-size: 1.3rem;
-  line-height: 1.2;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 #vehicle-tooltip-status-line {
-  margin: 0.55rem 0 0;
-  font-size: 1.02rem;
-  line-height: 1.35;
-  font-weight: 600;
+  grid-column: 2;
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  opacity: 0.75;
+  overflow-wrap: anywhere;
 }
 
 #vehicle-tooltip-debug {
-  margin: 0.85rem 0 0;
+  grid-column: 1 / -1;
+  grid-row: 4;
+  margin: 0.5rem 0 0;
   display: grid;
   gap: 0.4rem;
 }
@@ -137,7 +142,8 @@ body {
 
 .vehicle-tooltip-debug-row dt {
   margin: 0;
-  color: rgba(17, 24, 39, 0.68);
+  color: var(--text-color);
+  opacity: 0.7;
   font-weight: 700;
 }
 
@@ -153,35 +159,52 @@ body {
 }
 
 .vehicle-tooltip-nav {
-  margin-top: 0.95rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.9rem;
+  display: contents;
 }
 
 .vehicle-tooltip-nav button {
-  width: 2.1rem;
-  height: 2.1rem;
-  border: 1px solid rgba(17, 24, 39, 0.2);
-  border-radius: 999px;
-  background: #ffffff;
-  color: #111827;
-  font-size: 1rem;
-  font-weight: 700;
+  grid-row: 1 / 4;
+  width: 2rem;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-size: 1.1rem;
   cursor: pointer;
+  border-radius: 4px;
+}
+
+#vehicle-tooltip-prev {
+  grid-column: 1;
+}
+
+#vehicle-tooltip-next {
+  grid-column: 3;
+}
+
+.vehicle-tooltip-nav button:hover:enabled {
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+}
+
+.vehicle-tooltip-nav button:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
 }
 
 .vehicle-tooltip-nav button:disabled {
-  opacity: 0.42;
+  opacity: 0.3;
   cursor: default;
 }
 
 #vehicle-tooltip-index {
-  min-width: 3.2rem;
-  text-align: center;
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 0.15rem;
+  font-size: 0.65rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 700;
+  opacity: 0.6;
 }
 
 #debug-footer {
@@ -224,11 +247,11 @@ body {
 }
 
 #site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem 2rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 360px) minmax(0, 1fr);
+  /* Keep navigation and toggles anchored when the route readout grows. */
+  align-items: start;
+  gap: 0.5rem 1rem;
   width: min(960px, 100%);
   margin-inline: auto;
   padding-block: 0.5rem;
@@ -238,6 +261,8 @@ body {
 }
 
 #site-header nav {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
   gap: clamp(1rem, 2.5vw, 2rem);
@@ -264,7 +289,9 @@ body {
 }
 
 #controls {
-  margin-left: auto;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
   display: flex;
   gap: 1.2rem;
   pointer-events: auto;
@@ -291,7 +318,6 @@ body {
   accent-color: var(--text-color);
 }
 
-body[data-theme="dark"] #vehicle-tooltip,
 body[data-theme="dark"] #debug-footer {
   border-color: rgba(229, 231, 235, 0.14);
   background: rgba(34, 40, 45, 0.94);
@@ -301,12 +327,6 @@ body[data-theme="dark"] #debug-footer {
 body[data-theme="dark"] .vehicle-tooltip-debug-row dt,
 body[data-theme="dark"] .debug-footer-label {
   color: rgba(229, 231, 235, 0.7);
-}
-
-body[data-theme="dark"] .vehicle-tooltip-nav button {
-  border-color: rgba(229, 231, 235, 0.18);
-  background: rgba(17, 24, 39, 0.8);
-  color: #f9fafb;
 }
 
 #site-content {
@@ -364,13 +384,44 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
   margin-top: 0.4rem;
 }
 
+@media (max-width: 960px) {
+  #site-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  #controls {
+    grid-column: 2;
+  }
+
+  #vehicle-tooltip {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: min(420px, 100%);
+    justify-self: center;
+  }
+}
+
+@media (max-width: 480px) {
+  #site-header {
+    column-gap: 0.75rem;
+  }
+
+  #site-header nav,
+  #controls {
+    gap: 0.65rem;
+  }
+
+  .toggle-control {
+    gap: 0.3rem;
+  }
+}
+
 @media (max-width: 720px) {
   #content-overlay {
     padding-top: 0.8rem;
   }
 
   #controls {
-    gap: 1.2rem;
     margin-left: 0;
     flex-wrap: wrap;
   }
@@ -378,11 +429,6 @@ body[data-theme="dark"] .vehicle-tooltip-nav button {
   .toggle-control {
     font-size: 0.82rem;
     padding: 0.5rem 0;
-  }
-
-  #vehicle-tooltip {
-    width: min(92vw, 420px);
-    padding: 0.9rem;
   }
 
   #debug-footer {
