@@ -51,14 +51,6 @@ function requireCanvas(selector: string): HTMLCanvasElement {
   return element;
 }
 
-function requireInput(selector: string): HTMLInputElement {
-  const element = document.querySelector(selector);
-  if (!element || !(element instanceof HTMLInputElement)) {
-    throw new Error(`Missing required input element: ${selector}`);
-  }
-  return element;
-}
-
 function requireButton(selector: string): HTMLButtonElement {
   const element = document.querySelector(selector);
   if (!element || !(element instanceof HTMLButtonElement)) {
@@ -97,8 +89,8 @@ function bootstrap(): void {
   const contentOverlay = requireHtmlElement("#content-overlay");
   const content = requireHtmlElement("#site-content");
   const header = requireHtmlElement("#site-header");
-  const contentVisibilityToggle = requireInput("#toggle-content-visibility");
-  const darkModeToggle = requireInput("#toggle-dark-mode");
+  const contentVisibilityToggle = requireButton("#toggle-content-visibility");
+  const darkModeToggle = requireButton("#toggle-dark-mode");
   const hoverOutline = requireHtmlElement("#grid-hover-outline");
   const selectedOutline = requireHtmlElement("#grid-selected-outline");
   const tooltip = requireHtmlElement("#vehicle-tooltip");
@@ -126,8 +118,8 @@ function bootstrap(): void {
       : null;
 
   applyTheme(themeState.getTheme());
-  contentVisibilityToggle.checked = true;
-  darkModeToggle.checked = false;
+  contentVisibilityToggle.setAttribute("aria-pressed", "true");
+  darkModeToggle.setAttribute("aria-pressed", "false");
   setContentLayerVisible(content, contentOverlay, true);
   hoverOutline.setAttribute("data-visible", "false");
   selectedOutline.setAttribute("data-visible", "false");
@@ -581,7 +573,8 @@ function bootstrap(): void {
   const setContentVisibility = (visible: boolean): void => {
     isContentVisible = visible;
     shapePrefetcher.cancel();
-    contentVisibilityToggle.checked = visible;
+    contentVisibilityToggle.setAttribute("aria-pressed", String(visible));
+    contentVisibilityToggle.title = visible ? "Hide content" : "Show content";
     tooltipMetadata.setHiddenModeEnabled(!isContentVisible);
     setContentLayerVisible(content, contentOverlay, isContentVisible);
     renderer.setContentMaskVisible(isContentVisible);
@@ -610,12 +603,14 @@ function bootstrap(): void {
     pollingLoop.setPaused(document.hidden);
   };
 
-  contentVisibilityToggle.addEventListener("change", () => {
-    setContentVisibility(contentVisibilityToggle.checked);
+  contentVisibilityToggle.addEventListener("click", () => {
+    setContentVisibility(!isContentVisible);
   });
 
-  darkModeToggle.addEventListener("change", () => {
-    const nextTheme = themeState.setDarkModeEnabled(darkModeToggle.checked);
+  darkModeToggle.addEventListener("click", () => {
+    const nextTheme = themeState.setDarkModeEnabled(themeState.getTheme() !== "dark");
+    darkModeToggle.setAttribute("aria-pressed", String(nextTheme === "dark"));
+    darkModeToggle.title = nextTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
     applyTheme(nextTheme);
     renderer.setGridLineColor(getThemeGridLineColor(nextTheme));
   });
