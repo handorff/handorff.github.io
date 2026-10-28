@@ -1,6 +1,6 @@
 :root {
   color-scheme: only light;
-  --page-bg: #f3f5f7;
+  --page-bg: #eae7dc;
   --text-color: #18222c;
   --link-color: #244d67;
   --grid-line-color-light: rgba(130, 138, 145, 0.16);
@@ -17,7 +17,7 @@ body {
 }
 
 body[data-theme="light"] {
-  --page-bg: #f3f5f7;
+  --page-bg: #eae7dc;
   --text-color: #18222c;
   --link-color: #244d67;
 }
