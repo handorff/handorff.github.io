@@ -16,6 +16,16 @@ const MAP_SPAN_LON = 0.192;
 const MAP_CENTER_LAT = 42.3655;
 const MAP_CENTER_LON = -71.1038;
 
+// Padded coverage for the full network, including the CapeFLYER to Hyannis.
+// Verified against https://api-v3.mbta.com/stops?filter[location_type]=1
+// Keep the initial Boston bounds below unchanged so the default view retains its scale.
+export const SERVICE_AREA_BOUNDS = {
+  north: 42.9,
+  south: 41.45,
+  west: -72,
+  east: -70.15
+};
+
 export const GRID_CONFIG: GridConfig = {
   bounds: {
     north: MAP_CENTER_LAT + MAP_SPAN_LAT / 2,

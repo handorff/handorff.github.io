@@ -467,3 +467,64 @@ body[data-theme="dark"] .debug-footer-label {
     transition: none;
   }
 }
+
+#grid-canvas[data-interactive="true"] {
+  touch-action: none;
+  cursor: grab;
+}
+
+#grid-canvas[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+#map-controls {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+  border-radius: 12px;
+  background: var(--page-bg);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--text-color) 10%, transparent);
+}
+
+#map-controls[hidden] {
+  display: none;
+}
+
+#map-controls button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+#map-controls button:hover:enabled {
+  background: color-mix(in srgb, var(--text-color) 8%, transparent);
+}
+
+#map-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+#map-controls button:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 1px;
+}
+
+/* Keep diagnostic readouts clear of map controls when debug mode is enabled. */
+body:has(#map-controls:not([hidden])) #debug-footer {
+  right: max(5rem, calc(env(safe-area-inset-right) + 5rem));
+  min-width: 0;
+  max-width: calc(100vw - 6rem);
+}

@@ -1,7 +1,8 @@
 import {
   FALLBACK_COLOR_HEX,
   GRID_CONFIG,
-  OCCUPIED_CELL_ALPHA
+  OCCUPIED_CELL_ALPHA,
+  SERVICE_AREA_BOUNDS
 } from "./config";
 import {
   DEBUG_SOURCE_KEYS,
@@ -11,6 +12,7 @@ import {
 } from "./debug";
 import {
   calculateRenderGridDimensions,
+  calculateCoverageGridDimensions,
   buildCellStateMap,
   buildSelectedVehicleRgbaBuffer,
   buildRgbaBuffer,
@@ -18,6 +20,7 @@ import {
   latLonToCell
 } from "./grid";
 import { fetchStopsByIds, fetchTripsByIds, fetchVehicleSnapshot } from "./mbtaApi";
+import { bindMapNavigation } from "./mapNavigation";
 import { bindNavigation } from "./navigation";
 import { bindPageLifecycle, createPollingLoop } from "./polling";
 import { GridRenderer } from "./renderer";
@@ -129,8 +132,9 @@ function bootstrap(): void {
   debugFooter.hidden = !debugModeEnabled;
 
   const baseDims = calculateGridDimensions(GRID_CONFIG);
+  const coverageDims = calculateCoverageGridDimensions(GRID_CONFIG.bounds, baseDims, SERVICE_AREA_BOUNDS);
   let renderDims = calculateRenderGridDimensions(
-    baseDims,
+    coverageDims,
     window.innerWidth,
     window.innerHeight,
     GRID_CONFIG.cellSizePx
@@ -570,8 +574,27 @@ function bootstrap(): void {
 
   renderDebugFooter();
 
+  const mapNavigation = bindMapNavigation({
+    canvas,
+    controls: requireHtmlElement("#map-controls"),
+    zoomIn: requireButton("#map-zoom-in"),
+    zoomOut: requireButton("#map-zoom-out"),
+    reset: requireButton("#map-reset"),
+    getRenderer: () => renderer,
+    onGestureStart: () => {
+      shapePrefetcher.cancel();
+      hideHoverOutline();
+    },
+    onViewChanged: () => {
+      hideHoverOutline();
+      updateSelectionVisualization?.();
+    }
+  });
+  mapNavigation.setEnabled(false);
+
   const setContentVisibility = (visible: boolean): void => {
     isContentVisible = visible;
+    mapNavigation.setEnabled(!visible);
     shapePrefetcher.cancel();
     contentVisibilityToggle.setAttribute("aria-pressed", String(visible));
     contentVisibilityToggle.title = visible ? "Hide content" : "Show content";
@@ -581,6 +604,7 @@ function bootstrap(): void {
 
     if (isContentVisible) {
       clearSelection();
+      renderer.setState(computeBuffer(latestVehicles));
       hideHoverOutline();
       return;
     }
@@ -616,7 +640,7 @@ function bootstrap(): void {
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    if (!canShowHoverOutline()) {
+    if (!canShowHoverOutline() || event.buttons !== 0) {
       shapePrefetcher.cancel();
       hideHoverOutline();
       return;
@@ -750,7 +774,7 @@ function bootstrap(): void {
   window.addEventListener("resize", () => {
     shapePrefetcher.cancel();
     const nextRenderDims = calculateRenderGridDimensions(
-      baseDims,
+      coverageDims,
       window.innerWidth,
       window.innerHeight,
       GRID_CONFIG.cellSizePx
@@ -759,8 +783,10 @@ function bootstrap(): void {
     if (!sameDims(renderDims, nextRenderDims)) {
       renderDims = nextRenderDims;
       shapeCellCache.clear();
+      const view = renderer.getView();
       renderer.stop();
       renderer = createRenderer();
+      renderer.setView(view);
       updateContentMask();
       renderer.setState(computeBuffer(latestVehicles));
       hideHoverOutline();

@@ -36,6 +36,21 @@ export function calculateGridDimensions(config: GridConfig): GridDimensions {
   };
 }
 
+/** Pad symmetrically so extending coverage does not move the initial map center. */
+export function calculateCoverageGridDimensions(
+  bounds: GeoBounds,
+  baseDims: GridDimensions,
+  coverage: GeoBounds
+): GridDimensions {
+  const latPerCell = (bounds.north - bounds.south) / baseDims.rows;
+  const lonPerCell = (bounds.east - bounds.west) / baseDims.cols;
+  const rowPadding = Math.max(0, Math.ceil(Math.max(coverage.north - bounds.north, bounds.south - coverage.south) / latPerCell));
+  const colPadding = Math.max(0, Math.ceil(Math.max(bounds.west - coverage.west, coverage.east - bounds.east) / lonPerCell));
+  const rows = baseDims.rows + rowPadding * 2;
+  const cols = baseDims.cols + colPadding * 2;
+  return { rows, cols, cellCount: rows * cols };
+}
+
 export function calculateRenderGridDimensions(
   baseDims: GridDimensions,
   viewportWidthPx: number,

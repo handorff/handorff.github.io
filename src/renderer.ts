@@ -21,6 +21,15 @@ export interface CellRect {
   height: number;
 }
 
+export interface MapView {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+export const MIN_MAP_ZOOM = 0.025;
+export const MAX_MAP_ZOOM = 4;
+
 interface GridMetrics {
   pitch: number;
   fillSize: number;
@@ -75,10 +84,14 @@ export class GridRenderer {
   private readonly toBuffer: Float32Array;
   private readonly frameBuffer: Float32Array;
   private gridLineColor: string;
+  private view: MapView = { zoom: 1, panX: 0, panY: 0 };
+  private textRects: CellRect[] = [];
+  private persistentRects: CellRect[] = [];
   private dpr = 1;
   private viewportWidthPx = 0;
   private viewportHeightPx = 0;
   private transitionStartMs = 0;
+  private transitionComplete = true;
   private rafId: number | null = null;
   private contentMask: { left: number; top: number; opacity: number; persistentOpacity: number }[] = [];
   private contentMaskVisible = true;
@@ -129,6 +142,7 @@ export class GridRenderer {
     this.fromBuffer.set(this.frameBuffer);
     this.toBuffer.set(nextBuffer);
     this.transitionStartMs = nowMs;
+    this.transitionComplete = false;
     this.activeTransitionMs = transitionMs;
   }
 
@@ -160,13 +174,39 @@ export class GridRenderer {
     this.contentMaskVisible = visible;
   }
 
+  public getView(): MapView {
+    return { ...this.view };
+  }
+
+  public setView(view: MapView): void {
+    this.view = { ...view, zoom: Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, view.zoom)) };
+    this.setContentRects(this.textRects, this.persistentRects);
+  }
+
+  public panBy(dx: number, dy: number): void {
+    this.setView({ ...this.view, panX: this.view.panX + dx, panY: this.view.panY + dy });
+  }
+
+  public zoomAt(factor: number, x = this.viewportWidthPx / 2, y = this.viewportHeightPx / 2): void {
+    const zoom = Math.min(MAX_MAP_ZOOM, Math.max(MIN_MAP_ZOOM, this.view.zoom * factor));
+    const ratio = zoom / this.view.zoom;
+    this.setView({
+      zoom,
+      panX: x - this.viewportWidthPx / 2 - (x - this.viewportWidthPx / 2 - this.view.panX) * ratio,
+      panY: y - this.viewportHeightPx / 2 - (y - this.viewportHeightPx / 2 - this.view.panY) * ratio
+    });
+  }
+
   public setContentRects(rects: CellRect[], persistentRects: CellRect[] = []): void {
+    this.textRects = rects;
+    this.persistentRects = persistentRects;
     const metrics = this.getGridMetrics();
     this.contentMask = [];
     // Cache a cell-aligned fade around actual text lines, rather than the content box.
     const featherPx = 64;
-    for (let row = 0; row < this.rows; row += 1) {
-      for (let col = 0; col < this.cols; col += 1) {
+    const visible = this.getVisibleCells(metrics);
+    for (let row = visible.firstRow; row < visible.endRow; row += 1) {
+      for (let col = visible.firstCol; col < visible.endCol; col += 1) {
         const left = metrics.offsetX + col * metrics.pitch;
         const top = metrics.offsetY + row * metrics.pitch;
         const x = left + metrics.pitch / 2;
@@ -226,7 +266,10 @@ export class GridRenderer {
 
   private draw(nowMs: number): void {
     const progress = this.activeTransitionMs <= 0 ? 1 : (nowMs - this.transitionStartMs) / this.activeTransitionMs;
-    interpolateBuffers(this.fromBuffer, this.toBuffer, progress, this.frameBuffer);
+    if (!this.transitionComplete) {
+      interpolateBuffers(this.fromBuffer, this.toBuffer, progress, this.frameBuffer);
+      this.transitionComplete = progress >= 1;
+    }
     this.drawFrame(this.frameBuffer);
   }
 
@@ -242,8 +285,9 @@ export class GridRenderer {
       metrics.pitch
     );
 
-    for (let row = 0; row < this.rows; row += 1) {
-      for (let col = 0; col < this.cols; col += 1) {
+    const visible = this.getVisibleCells(metrics);
+    for (let row = visible.firstRow; row < visible.endRow; row += 1) {
+      for (let col = visible.firstCol; col < visible.endCol; col += 1) {
         const index = row * this.cols + col;
         const offset = index * 4;
         const alpha = buffer[offset + 3];
@@ -275,14 +319,23 @@ export class GridRenderer {
     }
   }
 
+  private getVisibleCells(metrics: GridMetrics) {
+    return {
+      firstRow: Math.max(0, Math.floor(-metrics.offsetY / metrics.pitch)),
+      endRow: Math.min(this.rows, Math.ceil((this.viewportHeightPx - metrics.offsetY) / metrics.pitch)),
+      firstCol: Math.max(0, Math.floor(-metrics.offsetX / metrics.pitch)),
+      endCol: Math.min(this.cols, Math.ceil((this.viewportWidthPx - metrics.offsetX) / metrics.pitch))
+    };
+  }
+
   private getGridMetrics(): GridMetrics {
-    const pitch = this.cellSizePx;
-    const fillSize = Math.max(0, this.cellSizePx - this.cellGapPx);
+    const pitch = this.cellSizePx * this.view.zoom;
+    const fillSize = Math.max(0, pitch - this.cellGapPx * this.view.zoom);
     const inset = (pitch - fillSize) / 2;
     const gridWidthPx = this.cols * pitch;
     const gridHeightPx = this.rows * pitch;
-    const offsetX = (this.viewportWidthPx - gridWidthPx) / 2;
-    const offsetY = (this.viewportHeightPx - gridHeightPx) / 2;
+    const offsetX = (this.viewportWidthPx - gridWidthPx) / 2 + this.view.panX;
+    const offsetY = (this.viewportHeightPx - gridHeightPx) / 2 + this.view.panY;
 
     return {
       pitch,
@@ -298,24 +351,30 @@ export class GridRenderer {
   private drawGridLines(
     offsetX: number,
     offsetY: number,
-    gridWidthPx: number,
-    gridHeightPx: number,
+    _gridWidthPx: number,
+    _gridHeightPx: number,
     pitch: number
   ): void {
     this.ctx.beginPath();
     this.ctx.strokeStyle = this.gridLineColor;
-    this.ctx.lineWidth = GRID_LINE_WIDTH_PX;
+    // Thin dense lines at distant zoom levels so they do not obscure vehicles.
+    this.ctx.lineWidth = Math.min(GRID_LINE_WIDTH_PX, pitch * 0.1);
 
-    for (let col = 0; col <= this.cols; col += 1) {
+    // Continue the background lattice across the viewport even beyond service coverage.
+    const firstCol = Math.floor(-offsetX / pitch);
+    const endCol = Math.ceil((this.viewportWidthPx - offsetX) / pitch);
+    const firstRow = Math.floor(-offsetY / pitch);
+    const endRow = Math.ceil((this.viewportHeightPx - offsetY) / pitch);
+    for (let col = firstCol; col <= endCol; col += 1) {
       const x = offsetX + col * pitch;
-      this.ctx.moveTo(x, offsetY);
-      this.ctx.lineTo(x, offsetY + gridHeightPx);
+      this.ctx.moveTo(x, 0);
+      this.ctx.lineTo(x, this.viewportHeightPx);
     }
 
-    for (let row = 0; row <= this.rows; row += 1) {
+    for (let row = firstRow; row <= endRow; row += 1) {
       const y = offsetY + row * pitch;
-      this.ctx.moveTo(offsetX, y);
-      this.ctx.lineTo(offsetX + gridWidthPx, y);
+      this.ctx.moveTo(0, y);
+      this.ctx.lineTo(this.viewportWidthPx, y);
     }
 
     this.ctx.stroke();

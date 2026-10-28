@@ -4,9 +4,11 @@ import {
   buildSelectedVehicleRgbaBuffer,
   buildRgbaBuffer,
   calculateRenderGridDimensions,
+  calculateCoverageGridDimensions,
   calculateGridDimensions,
   latLonToCell
 } from "./grid";
+import { GRID_CONFIG, SERVICE_AREA_BOUNDS } from "./config";
 import type { GridConfig, RouteMeta, Vehicle } from "./types";
 
 describe("grid mapping", () => {
@@ -239,5 +241,36 @@ describe("cell winner selection", () => {
     expect(buffer[1]).toBe(115);
     expect(buffer[2]).toBe(128);
     expect(buffer[3]).toBeCloseTo(0.88);
+  });
+});
+
+describe("MBTA service coverage", () => {
+  const base = calculateGridDimensions(GRID_CONFIG);
+  const coverage = calculateCoverageGridDimensions(GRID_CONFIG.bounds, base, SERVICE_AREA_BOUNDS);
+
+  it("includes outer rail terminals and every corner of the padded coverage", () => {
+    const stations = [
+      [41.581289, -71.491147], // Wickford Junction
+      [42.797837, -70.87797], // Newburyport
+      [42.553477, -71.848488], // Wachusett
+      [41.660225, -70.276583], // Hyannis
+      [41.644, -70.924], // New Bedford
+      [42.655, -70.62] // Rockport
+    ];
+    for (const lat of [SERVICE_AREA_BOUNDS.north, SERVICE_AREA_BOUNDS.south]) {
+      for (const lon of [SERVICE_AREA_BOUNDS.west, SERVICE_AREA_BOUNDS.east]) stations.push([lat, lon]);
+    }
+    for (const [lat, lon] of stations) {
+      const cell = latLonToCell(GRID_CONFIG.bounds, base, lat, lon, coverage);
+      expect(cell, `${lat}, ${lon}`).not.toBeNull();
+      expect(cell!.index).toBeLessThan(coverage.cellCount);
+    }
+  });
+
+  it("preserves the original cell scale and centered positions", () => {
+    const original = latLonToCell(GRID_CONFIG.bounds, base, 42.3655, -71.1038)!;
+    const expanded = latLonToCell(GRID_CONFIG.bounds, base, 42.3655, -71.1038, coverage)!;
+    expect(expanded.col - coverage.cols / 2).toBe(original.col - base.cols / 2);
+    expect(expanded.row - coverage.rows / 2).toBe(original.row - base.rows / 2);
   });
 });

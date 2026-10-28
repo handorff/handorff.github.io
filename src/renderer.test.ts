@@ -218,3 +218,42 @@ describe("GridRenderer transition duration", () => {
     expect(drawFrame.mock.calls.at(-1)![0][3]).toBe(0);
   });
 });
+
+describe("GridRenderer map view", () => {
+  it("keeps the cell under the zoom anchor fixed and transforms hit testing", () => {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+    renderer.zoomAt(2, 10, 10);
+    expect(renderer.getCellRect(0, 0)).toEqual({ left: 10, top: 10, width: 20, height: 20 });
+    expect(renderer.getCellFromViewportPoint(35, 15)?.index).toBe(1);
+    renderer.panBy(-10, 5);
+    expect(renderer.getCellRect(0, 0)).toEqual({ left: 0, top: 15, width: 20, height: 20 });
+    expect(renderer.getCellFromViewportPoint(25, 20)?.index).toBe(1);
+    expect(renderer.getCellFromViewportPoint(5, 10)).toBeNull();
+  });
+
+  it("limits zoom and restores the original geometry on reset", () => {
+    const { renderer } = createRendererWithContext();
+    renderer.resize(40, 40);
+    renderer.zoomAt(100);
+    expect(renderer.getView().zoom).toBe(4);
+    renderer.zoomAt(0.001);
+    expect(renderer.getView().zoom).toBe(0.025);
+    renderer.setView({ zoom: 1, panX: 0, panY: 0 });
+    expect(renderer.getCellRect(0, 0)).toEqual({ left: 10, top: 10, width: 10, height: 10 });
+  });
+});
+
+describe("extended background grid", () => {
+  it("draws grid lines across the viewport when the data grid is zoomed out or panned away", () => {
+    const { renderer, context } = createRendererWithContext();
+    renderer.resize(400, 300);
+    context.moveTo = vi.fn();
+    context.lineTo = vi.fn();
+    renderer.setView({ zoom: 0.025, panX: 1000, panY: 1000 });
+    (renderer as unknown as { drawFrame: (buffer: Float32Array) => void }).drawFrame(new Float32Array(16));
+    expect(context.moveTo).toHaveBeenCalledWith(0, 0);
+    expect(context.lineTo).toHaveBeenCalledWith(0, 300);
+    expect(context.lineTo).toHaveBeenCalledWith(400, 0);
+  });
+});
