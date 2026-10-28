@@ -1,6 +1,7 @@
 import {
   FALLBACK_COLOR_HEX,
   GRID_CONFIG,
+  MBTA_INITIAL_RETRY_INTERVAL_MS,
   OCCUPIED_CELL_ALPHA,
   SERVICE_AREA_BOUNDS
 } from "./config";
@@ -535,7 +536,7 @@ function bootstrap(): void {
     tooltip.setAttribute("data-open", "true");
   };
 
-  const refreshVehicles = async (): Promise<void> => {
+  const refreshVehicles = async (): Promise<boolean> => {
     try {
       const snapshot = await fetchVehicleSnapshot();
       markDebugSourceUpdated("vehicles");
@@ -562,13 +563,16 @@ function bootstrap(): void {
         renderTooltipForSelection?.();
         prefetchSelectedVehicleMetadata(getSelectedVehicle());
       }
+      return true;
     } catch (error) {
       console.error("Unable to refresh MBTA vehicles. Keeping current frame.", error);
+      return false;
     }
   };
 
   const pollingLoop = createPollingLoop({
     intervalMs: GRID_CONFIG.pollIntervalMs,
+    initialRetryIntervalMs: MBTA_INITIAL_RETRY_INTERVAL_MS,
     task: refreshVehicles
   });
 

@@ -1,6 +1,8 @@
 interface PollingOptions {
   intervalMs: number;
-  task: () => Promise<void>;
+  initialRetryIntervalMs?: number;
+  // Return false when a refresh fails; a successful empty snapshot still counts.
+  task: () => Promise<void | boolean>;
   setIntervalFn?: typeof setInterval;
   clearIntervalFn?: typeof clearInterval;
 }
@@ -21,6 +23,13 @@ export function createPollingLoop(options: PollingOptions): PollingLoop {
   let timerId: ReturnType<typeof setInterval> | null = null;
   let paused = false;
   let inFlight = false;
+  let hasSucceeded = false;
+
+  const schedule = (): void => {
+    timerId = setIntervalRef(() => {
+      void tick();
+    }, hasSucceeded ? options.intervalMs : options.initialRetryIntervalMs ?? options.intervalMs);
+  };
 
   const tick = async (): Promise<void> => {
     if (paused || inFlight) {
@@ -29,7 +38,14 @@ export function createPollingLoop(options: PollingOptions): PollingLoop {
 
     inFlight = true;
     try {
-      await options.task();
+      const succeeded = (await options.task()) !== false;
+      if (succeeded && !hasSucceeded) {
+        hasSucceeded = true;
+        if (timerId !== null && options.initialRetryIntervalMs !== undefined) {
+          clearIntervalRef(timerId);
+          schedule();
+        }
+      }
     } finally {
       inFlight = false;
     }
@@ -41,9 +57,7 @@ export function createPollingLoop(options: PollingOptions): PollingLoop {
         return;
       }
 
-      timerId = setIntervalRef(() => {
-        void tick();
-      }, options.intervalMs);
+      schedule();
 
       void tick();
     },

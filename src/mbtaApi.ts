@@ -3,6 +3,7 @@ import {
   MBTA_ROUTES_ENDPOINT,
   MBTA_STOPS_ENDPOINT,
   MBTA_TRIPS_ENDPOINT,
+  MBTA_USES_PROXY,
   MBTA_VEHICLES_ENDPOINT
 } from "./config";
 import type { RouteMeta, TripMetadata, Vehicle, VehicleCurrentStatus } from "./types";
@@ -11,11 +12,12 @@ import { createMbtaFetch } from "./requestScheduler";
 const JSON_API_ACCEPT = "application/vnd.api+json";
 const HEX_COLOR_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 
-const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init));
+const scheduledFetch = createMbtaFetch((input, init) => fetch(input, init), undefined, {
+  spacingMs: MBTA_USES_PROXY ? 0 : undefined
+});
 // Shape metadata is requested during selection. The proxy manages upstream
 // caching/rate limits; direct MBTA access retains the anonymous request pacing.
-const shapeFetch = new URL(MBTA_API_BASE_URL).hostname === "api-v3.mbta.com"
-  ? scheduledFetch : scheduledFetch.interactive;
+const shapeFetch = MBTA_USES_PROXY ? scheduledFetch.interactive : scheduledFetch;
 
 type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
 

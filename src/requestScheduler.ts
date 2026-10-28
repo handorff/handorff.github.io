@@ -15,7 +15,11 @@ function resetTime(response: Response, now: number): number {
 
 // The deadline starts when a queued request is dispatched, after spacing/cooldown.
 // Buffering the body keeps the scheduler occupied until the entire request settles.
-export function createMbtaFetch(fetchImpl: FetchLike, timeoutMs = 15_000): MbtaFetch {
+export function createMbtaFetch(
+  fetchImpl: FetchLike,
+  timeoutMs = 15_000,
+  options: { spacingMs?: number } = {}
+): MbtaFetch {
   let cooldownUntil = 0;
   const createQueue = (spacingMs: number): FetchLike => {
     let queue: Promise<unknown> = Promise.resolve();
@@ -67,5 +71,5 @@ export function createMbtaFetch(fetchImpl: FetchLike, timeoutMs = 15_000): MbtaF
   };
   // Interactive proxy requests bypass polling and its spacing, but stay serial
   // with each other and share rate-limit cooldowns with the background queue.
-  return Object.assign(createQueue(REQUEST_SPACING_MS), { interactive: createQueue(0) });
+  return Object.assign(createQueue(options.spacingMs ?? REQUEST_SPACING_MS), { interactive: createQueue(0) });
 }

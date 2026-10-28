@@ -25,6 +25,30 @@ describe("createPollingLoop", () => {
     expect(task).toHaveBeenCalledTimes(4);
   });
 
+  it.each([1_000, 3_500])("retries initial failures every %i ms and keeps normal polling after success", async (initialRetryIntervalMs) => {
+    const task = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true).mockResolvedValue(false);
+    const loop = createPollingLoop({ intervalMs: 10_000, initialRetryIntervalMs, task });
+    loop.start();
+    await vi.advanceTimersByTimeAsync(initialRetryIntervalMs * 2 - 1);
+    expect(task).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(task).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(task).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(task).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(task).toHaveBeenCalledTimes(5);
+    loop.stop();
+    loop.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(task).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(task).toHaveBeenCalledTimes(6);
+    loop.stop();
+  });
+
   it("prevents overlapping runs while a task is in flight", async () => {
     let releaseFirstTask!: () => void;
     const firstTask = new Promise<void>((resolve) => {
@@ -136,6 +160,32 @@ describe("page lifecycle", () => {
 });
 
 describe("polling request recovery", () => {
+  it("honors server cooldowns without overlapping aggressive startup retries", async () => {
+    const { createMbtaFetch } = await import("./requestScheduler");
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce(new Response("unavailable", { status: 503, headers: { "Retry-After": "5" } }))
+        .mockImplementation(async () => new Response('{"data":[]}'));
+      const request = createMbtaFetch(fetchImpl, undefined, { spacingMs: 0 });
+      const task = vi.fn(async () => (await request("https://example.test/vehicles")).ok);
+      const loop = createPollingLoop({ intervalMs: 10_000, initialRetryIntervalMs: 1_000, task });
+      loop.start();
+      await vi.advanceTimersByTimeAsync(5999);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(task).toHaveBeenCalledTimes(2);
+      expect(loop.isInFlight()).toBe(true);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(loop.isInFlight()).toBe(false);
+      await vi.advanceTimersByTimeAsync(9999);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+      loop.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
   it("keeps the last frame during a body timeout and automatically polls again", async () => {
     const { createMbtaFetch } = await import("./requestScheduler");
     vi.useFakeTimers();
